@@ -3,9 +3,10 @@ import sys
 from threading import Thread
 
 from PyQt6.QtWidgets import (
-    QMainWindow, QVBoxLayout, QWidget, QPushButton, QLabel, QTabWidget, QMessageBox, QApplication
+    QMainWindow, QVBoxLayout, QWidget, QPushButton, QLabel, QTabWidget, QMessageBox, QApplication,
+    QStackedWidget  # QStackedWidget AJOUTÉ
 )
-from PyQt6.QtGui import QFont, QPixmap
+from PyQt6.QtGui import QFont, QPixmap, QIcon  # QIcon AJOUTÉ
 from PyQt6.QtCore import Qt, pyqtSignal
 
 # FIX: Updated relative and absolute imports
@@ -17,10 +18,11 @@ from .tabs.tab_filters import FiltersTab
 from .tabs.tab_de_novo import DeNovoTab
 from .tabs.tab_output_settings import OutputSettingTab
 from .tabs.tab_projects import ProjectsTab
-from .progress_window import ProgressWindow
+from .progress_window import ProgressView  # ProgressWindow changé en ProgressView
 # --- ADDITION ---
 # Import the global dictionary to check selections
 from .utils.global_vars import parameters_dict
+
 # --- END OF ADDITION ---
 
 if getattr(sys, 'frozen', False):
@@ -36,6 +38,11 @@ class MainWindow(QMainWindow):
 
     def __init__(self, main_function_ref):
         super().__init__()
+
+        # AJOUT : Définir l'icône de la fenêtre principale (pour la barre des tâches)
+        icon_path = os.path.join(BASE_DIR, "GUI", "assets", "FragHub_icon.png")
+        self.setWindowIcon(QIcon(icon_path))
+
         self.setWindowFlags(
             Qt.WindowType.Window | Qt.WindowType.WindowMinimizeButtonHint | Qt.WindowType.WindowCloseButtonHint
         )
@@ -43,10 +50,39 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("FragHub 1.4.1")
         self.setGeometry(100, 100, 1280, 720)
 
-        main_layout = QVBoxLayout()
-        banner = QLabel()
+        # --- NOUVEAU : QStackedWidget pour alterner les vues ---
+        self.stacked_widget = QStackedWidget()
 
-        # FIX: The icon path is now built from the root
+        # 1. Vue de configuration (Index 0)
+        self.config_view = self._create_config_view()
+        self.stacked_widget.addWidget(self.config_view)
+
+        # 2. Vue de progression (Index 1)
+        self.progress_view = ProgressView()  # UTILISE ProgressView
+        self.stacked_widget.addWidget(self.progress_view)
+
+        # Connexions des signaux de la vue de progression
+        self.progress_view.stop_requested_signal.connect(self.handle_stop_request)
+        self.progress_view.finish_requested_signal.connect(lambda: self.clean_exit(force_quit_app=False))
+
+        self.setCentralWidget(self.stacked_widget)
+        self.show_config_view()  # Démarrer en mode configuration
+        # --- FIN NOUVEAU ---
+
+        self.running = False
+        self.progress_window = None  # Rendu obsolète
+        self.thread = None
+        self.stop_thread_flag = False
+
+        self.error_occurred_signal.connect(self.handle_execution_error)
+        self.task_finished_signal.connect(self.handle_task_finished)
+
+    def _create_config_view(self):
+        """Crée et retourne le widget de la vue de configuration (onglets + bouton START)."""
+        config_container = QWidget()
+        main_layout = QVBoxLayout(config_container)
+
+        banner = QLabel()
         icon_path = os.path.join(BASE_DIR, "GUI", "assets", "FragHub_icon.png")
         pixmap = QPixmap(icon_path)
 
@@ -82,20 +118,21 @@ class MainWindow(QMainWindow):
         self.start_button.clicked.connect(self.open_progress_window)
         main_layout.addWidget(self.start_button, alignment=Qt.AlignmentFlag.AlignCenter)
 
-        central_widget = QWidget()
-        central_widget.setLayout(main_layout)
-        self.setCentralWidget(central_widget)
+        return config_container
 
-        self.running = False
-        self.progress_window = None
-        self.thread = None
-        self.stop_thread_flag = False
+    def show_config_view(self):
+        """Affiche la vue de configuration et restaure l'état."""
+        self.stacked_widget.setCurrentIndex(0)
+        self.setEnabled(True)
+        self.start_button.setEnabled(True)
 
-        self.error_occurred_signal.connect(self.handle_execution_error)
-        self.task_finished_signal.connect(self.handle_task_finished)
+    def show_progress_view(self):
+        """Affiche la vue de progression."""
+        self.stacked_widget.setCurrentIndex(1)
+        self.setEnabled(True)
 
     def open_progress_window(self):
-        # --- ADDITION: Check selections before starting ---
+        # --- Check selections before starting ---
         input_files = parameters_dict.get("input_directory")
         output_dir = parameters_dict.get("output_directory")
 
@@ -106,18 +143,14 @@ class MainWindow(QMainWindow):
             missing_selections.append("an output directory")
 
         if missing_selections:
-            # Build the error message and display it
             message = "Please select " + " and ".join(missing_selections) + " before starting."
             QMessageBox.warning(self, "Selection Required", message)
-            return  # Stop the function here if selections are missing
-        # --- END OF ADDITION ---
+            return
+        # --- END OF CHECK ---
 
         if not self.running:
-            self.showMinimized()
-            self.setEnabled(False)
-            self.progress_window = ProgressWindow(parent=self)
-            self.progress_window.stop_requested_signal.connect(self.handle_stop_request)
-            self.progress_window.show()
+            # Remplacer la logique de minimisation/fenêtre externe
+            self.show_progress_view()
             self.start_execution()
 
     def handle_stop_request(self):
@@ -131,9 +164,10 @@ class MainWindow(QMainWindow):
         self.running = True
         self.stop_thread_flag = False
 
-        if self.progress_window:
-            self.progress_window.progress_bar_widget.update_total_items(total=100, completed=0)
-            self.progress_window.progress_bar_widget.update_progress_bar(0)
+        # Utiliser self.progress_view
+        if self.progress_view:
+            self.progress_view.progress_bar_widget.update_total_items(total=100, completed=0)
+            self.progress_view.progress_bar_widget.update_progress_bar(0)
 
         if self.thread and self.thread.is_alive():
             self.stop_thread_flag = True
@@ -141,13 +175,14 @@ class MainWindow(QMainWindow):
             self.thread = None
 
         callbacks = {
-            'progress': self.progress_window.update_progress_signal.emit,
-            'total_items': self.progress_window.update_total_signal.emit,
-            'prefix': self.progress_window.update_prefix_signal.emit,
-            'item_type': self.progress_window.update_item_type_signal.emit,
-            'step': self.progress_window.update_step_signal.emit,
-            'completion': self.progress_window.completion_callback.emit,
-            'deletion': self.progress_window.deletion_callback.emit
+            # Utiliser self.progress_view
+            'progress': self.progress_view.update_progress_signal.emit,
+            'total_items': self.progress_view.update_total_signal.emit,
+            'prefix': self.progress_view.update_prefix_signal.emit,
+            'item_type': self.progress_view.update_item_type_signal.emit,
+            'step': self.progress_view.update_step_signal.emit,
+            'completion': self.progress_view.completion_callback.emit,
+            'deletion': self.progress_view.deletion_callback.emit
         }
         signals = {'error': self.error_occurred_signal, 'finished': self.task_finished_signal}
         stop_flag_provider = lambda: self.stop_thread_flag
@@ -160,13 +195,12 @@ class MainWindow(QMainWindow):
     def handle_task_finished(self):
         self.running = False
         self.thread = None
-        if self.progress_window and self.stop_thread_flag:
-            self.progress_window.close()
+        # Si la tâche a été arrêtée, revenir immédiatement à la vue de configuration
+        if self.stop_thread_flag:
+            self.show_config_view()
         self.stop_thread_flag = False
 
     def handle_execution_error(self, traceback_str):
-        if self.progress_window:
-            self.progress_window.close()
         show_error_message(parent=self, title="Execution Error", message=traceback_str,
                            on_close=lambda: self.clean_exit(force_quit_app=False))
 
@@ -174,16 +208,15 @@ class MainWindow(QMainWindow):
         if self.running and self.thread and self.thread.is_alive():
             self.stop_thread_flag = True
             self.thread.join(timeout=3.0)
-        if self.progress_window:
-            self.progress_window.close()
-            self.progress_window = None
+
+        # Retirer la logique de fermeture de fenêtre externe
+        self.progress_window = None
         self.running = False
         if force_quit_app:
             QApplication.instance().quit()
         else:
-            self.setEnabled(True)
-            self.showNormal()
-            self.activateWindow()
+            # Revenir à la vue de configuration
+            self.show_config_view()
 
     def closeEvent(self, event):
         if self.running:

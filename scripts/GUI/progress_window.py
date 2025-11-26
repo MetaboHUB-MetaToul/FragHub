@@ -91,7 +91,7 @@ class ProgressBarWidget(QWidget):
         self.update_progress_bar(completed)
 
 
-class ProgressWindow(QMainWindow):
+class ProgressView(QWidget):  # CLASSE RENOMMÉE et hérite de QWidget
     update_progress_signal = pyqtSignal(int)
     update_total_signal = pyqtSignal(int, int)
     update_prefix_signal = pyqtSignal(str)
@@ -100,22 +100,18 @@ class ProgressWindow(QMainWindow):
     completion_callback = pyqtSignal(str)
     deletion_callback = pyqtSignal(str)
     stop_requested_signal = pyqtSignal()
+    finish_requested_signal = pyqtSignal()  # NOUVEAU signal pour revenir à MainWindow
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.main_window_ref = parent
-        self.setWindowTitle("FragHub 1.4.1")
-        # CORRECTION: Chemin de l'icône
-        icon_path = os.path.join(BASE_DIR, "GUI", "assets", "FragHub_icon.png")
-        self.setWindowIcon(QIcon(icon_path))
-        self.setGeometry(100, 100, 1280, 720)
-        self.setWindowFlags(
-            Qt.WindowType.Window | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool | Qt.WindowType.WindowMinimizeButtonHint)
-        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, False)
+
+        # Le code de QMainWindow est retiré
 
         banner = QLabel()
-        # CORRECTION: Chemin du pixmap
-        pixmap = QPixmap(icon_path).scaled(200, 200,
+        # Chemin du pixmap (inchangé par rapport à la version d'origine)
+        icon_path = os.path.join(BASE_DIR, "GUI", "assets", "FragHub_icon.png")
+        # Réduction de l'icône dans la vue de progression (200->150)
+        pixmap = QPixmap(icon_path).scaled(150, 150,
                                            Qt.AspectRatioMode.KeepAspectRatio,
                                            Qt.TransformationMode.SmoothTransformation)
         banner.setPixmap(pixmap)
@@ -150,7 +146,7 @@ class ProgressWindow(QMainWindow):
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 0)
 
-        main_layout = QVBoxLayout()
+        main_layout = QVBoxLayout(self)  # Le layout est appliqué directement au QWidget
         main_layout.addWidget(banner)
         main_layout.addWidget(splitter)
 
@@ -158,7 +154,8 @@ class ProgressWindow(QMainWindow):
         self.finish_button.setFixedSize(120, 40)
         self.finish_button.setStyleSheet(
             "background-color: green; color: white; font-weight: bold; font-size: 14px; padding: 10px; border-radius: 5px;")
-        self.finish_button.clicked.connect(self.finish_button_clicked)
+        # Connexion au nouveau signal
+        self.finish_button.clicked.connect(self.finish_requested_signal.emit)
         self.finish_button.hide()
 
         self.stop_button = QPushButton("STOP")
@@ -173,9 +170,7 @@ class ProgressWindow(QMainWindow):
         button_layout.addWidget(self.finish_button)
         button_layout.addStretch()
         main_layout.addLayout(button_layout)
-        container = QWidget()
-        container.setLayout(main_layout)
-        self.setCentralWidget(container)
+        # container, setCentralWidget et self.main_window_ref retirés
 
         self.update_step_signal.connect(self.add_step_to_report)
         self.completion_callback.connect(self.handle_completion)
@@ -186,18 +181,7 @@ class ProgressWindow(QMainWindow):
         self.stop_button.setEnabled(False)
         self.stop_button.setText("STOPPING...")
 
-    def finish_button_clicked(self):
-        self.close()
-
-    def closeEvent(self, event):
-        if self.main_window_ref and self.main_window_ref.running:
-            self.stop_requested_signal.emit()
-        if self.main_window_ref:
-            self.main_window_ref.setEnabled(True)
-            self.main_window_ref.showNormal()
-            self.main_window_ref.activateWindow()
-            self.main_window_ref.progress_window = None
-        super().closeEvent(event)
+    # finish_button_clicked et closeEvent sont retirés et gérés par le signal/MainWindow
 
     def handle_completion(self, completion_message):
         while self.progress_layout.count() > 0:
