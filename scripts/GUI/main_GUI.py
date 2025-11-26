@@ -28,7 +28,7 @@ from .utils.global_vars import parameters_dict
 if getattr(sys, 'frozen', False):
     BASE_DIR = sys._MEIPASS
 else:
-    # FIX: Go up 2 levels (GUI -> scripts -> root)
+    # CHEMIN D'ORIGINE RESTAURÉ : '..'
     BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
 
@@ -122,6 +122,10 @@ class MainWindow(QMainWindow):
 
     def show_config_view(self):
         """Affiche la vue de configuration et restaure l'état."""
+        # FIX: Appeler la réinitialisation de la vue de progression
+        if self.progress_view:
+            self.progress_view.reset_view()
+
         self.stacked_widget.setCurrentIndex(0)
         self.setEnabled(True)
         self.start_button.setEnabled(True)

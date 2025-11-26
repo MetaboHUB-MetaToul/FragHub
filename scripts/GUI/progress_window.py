@@ -13,7 +13,7 @@ import platform
 if getattr(sys, 'frozen', False):
     BASE_DIR = sys._MEIPASS
 else:
-    # CORRECTION: Remonte de 2 niveaux (GUI -> scripts -> racine)
+    # CHEMIN D'ORIGINE RESTAURÉ
     BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
 if platform.system() == "Windows":
@@ -105,10 +105,7 @@ class ProgressView(QWidget):  # CLASSE RENOMMÉE et hérite de QWidget
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        # Le code de QMainWindow est retiré
-
         banner = QLabel()
-        # Chemin du pixmap (inchangé par rapport à la version d'origine)
         icon_path = os.path.join(BASE_DIR, "GUI", "assets", "FragHub_icon.png")
         # Réduction de l'icône dans la vue de progression (200->150)
         pixmap = QPixmap(icon_path).scaled(150, 150,
@@ -135,10 +132,11 @@ class ProgressView(QWidget):  # CLASSE RENOMMÉE et hérite de QWidget
         self.bottom_tab_widget = QTabWidget()
         self.progress_tab = QWidget()
         self.progress_layout = QVBoxLayout()
-        self.progress_bar_widget = ProgressBarWidget(self.update_progress_signal, self.update_total_signal,
-                                                     self.update_prefix_signal, self.update_item_type_signal)
-        self.progress_bar_widget.progress_completed_signal.connect(self.add_to_report)
+
+        # Initialisation du ProgressBarWidget via une méthode pour la réutilisation dans reset_view
+        self.progress_bar_widget = self._create_progress_bar_widget()
         self.progress_layout.addWidget(self.progress_bar_widget)
+
         self.progress_tab.setLayout(self.progress_layout)
         self.bottom_tab_widget.addTab(self.progress_tab, "Progress")
         splitter.addWidget(self.bottom_tab_widget)
@@ -170,20 +168,25 @@ class ProgressView(QWidget):  # CLASSE RENOMMÉE et hérite de QWidget
         button_layout.addWidget(self.finish_button)
         button_layout.addStretch()
         main_layout.addLayout(button_layout)
-        # container, setCentralWidget et self.main_window_ref retirés
 
         self.update_step_signal.connect(self.add_step_to_report)
         self.completion_callback.connect(self.handle_completion)
         self.deletion_callback.connect(self.add_deletion_to_report)
+
+    def _create_progress_bar_widget(self):
+        """Méthode utilitaire pour créer et connecter le ProgressBarWidget."""
+        pb_widget = ProgressBarWidget(self.update_progress_signal, self.update_total_signal,
+                                      self.update_prefix_signal, self.update_item_type_signal)
+        pb_widget.progress_completed_signal.connect(self.add_to_report)
+        return pb_widget
 
     def stop_button_clicked(self):
         self.stop_requested_signal.emit()
         self.stop_button.setEnabled(False)
         self.stop_button.setText("STOPPING...")
 
-    # finish_button_clicked et closeEvent sont retirés et gérés par le signal/MainWindow
-
     def handle_completion(self, completion_message):
+        # Supprime la barre de progression/message précédent
         while self.progress_layout.count() > 0:
             item = self.progress_layout.takeAt(0)
             if widget := item.widget():
@@ -234,3 +237,33 @@ class ProgressView(QWidget):  # CLASSE RENOMMÉE et hérite de QWidget
         new_deletion.setStyleSheet("color: red;")
         self.report_content.insertWidget(self.report_content.count() - 1, new_deletion)
         self.report_scroll.verticalScrollBar().setValue(self.report_scroll.verticalScrollBar().maximum())
+
+    def reset_view(self):
+        """Réinitialise l'état de la vue de progression pour un nouveau run."""
+
+        # 1. Nettoyer la zone de progression (supprime le message de complétion si présent)
+        while self.progress_layout.count() > 0:
+            if item := self.progress_layout.takeAt(0):
+                if widget := item.widget(): widget.deleteLater()
+
+        # 2. Recréer et ré-ajouter le ProgressBarWidget
+        self.progress_bar_widget = self._create_progress_bar_widget()
+        self.progress_layout.addWidget(self.progress_bar_widget)
+
+        # 3. Réinitialiser les boutons
+        self.stop_button.show()
+        self.stop_button.setEnabled(True)
+        self.stop_button.setText("STOP")
+        self.finish_button.hide()
+
+        # 4. Vider l'onglet Rapport
+        widgets_to_remove = []
+        # Supprimer tous les widgets sauf l'étirement (stretch) à la fin
+        for i in range(self.report_content.count() - 1):
+            item = self.report_content.itemAt(0)
+            if item.widget():
+                widgets_to_remove.append(item.widget())
+            self.report_content.removeItem(item)
+
+        for widget in widgets_to_remove:
+            widget.deleteLater()
