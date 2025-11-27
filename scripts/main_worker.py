@@ -1,29 +1,32 @@
-# main_worker.py
-
 import traceback
 
 
 def run_main_in_worker(main_function, callbacks, signals, stop_flag_provider):
     """
-    Wrapper pour exécuter la logique de MAIN dans un thread séparé.
-    Cette fonction est destinée à être la cible d'un objet threading.Thread.
+    A wrapper to execute the core application logic (main_function) in a separate thread.
+    This function is designed to be the target for a threading.Thread object.
 
-    Args:
-        main_function (function): La fonction MAIN à exécuter.
-        callbacks (dict): Un dictionnaire de fonctions de rappel (callbacks) pour les mises à jour de la progression.
-        signals (dict): Un dictionnaire de signaux PyQt à émettre pour les erreurs et l'achèvement.
-        stop_flag_provider (function): Une fonction (ou lambda) qui retourne l'état du drapeau d'arrêt.
+    :param main_function: The main processing function to be executed.
+    :type main_function: function
+    :param callbacks: A dictionary of callback functions for progress updates to the GUI.
+    :type callbacks: dict
+    :param signals: A dictionary of PyQt signals to emit upon error or completion.
+    :type signals: dict
+    :param stop_flag_provider: A function (or lambda) that returns the current state of the stop flag (bool).
+    :type stop_flag_provider: function
     """
     try:
-        # Tente d'importer l'exception personnalisée depuis le module MAIN.
-        # Si elle n'est pas trouvée, une classe par défaut est utilisée.
+        # --- Custom Exception Handling for User Interruption ---
         try:
+            # Attempt to import the specific InterruptedError defined in the MAIN module.
             from scripts.MAIN import InterruptedError
         except ImportError:
+            # Define a local class if the custom exception cannot be found, ensuring execution continues.
             class InterruptedError(Exception):
                 pass
 
-        # Appel de la fonction de traitement principale avec tous les callbacks et le drapeau d'arrêt
+        # --- Execution of Main Processing Function ---
+        # Call the core function, mapping all necessary communication functions.
         main_function(
             progress_callback=callbacks['progress'],
             total_items_callback=callbacks['total_items'],
@@ -34,18 +37,20 @@ def run_main_in_worker(main_function, callbacks, signals, stop_flag_provider):
             deletion_callback=callbacks['deletion'],
             stop_flag=stop_flag_provider
         )
-    except InterruptedError as ie:
-        # Cette exception est attendue lorsque l'utilisateur clique sur le bouton "STOP".
-        print(f"Execution interrompue par l'utilisateur: {ie}")
-        # Ceci n'est pas traité comme une erreur à afficher dans une boîte de message.
-        # Le bloc 'finally' assurera l'émission du signal task_finished.
+
+    except InterruptedError:
+        # This exception is raised by the main logic when the user requests a stop.
+        # This is a normal, handled interruption and does not trigger an error message box.
+        pass
+
     except Exception:
-        # Capture toute autre exception inattendue pendant l'exécution de MAIN.
+        # --- Unhandled Exception Catch ---
+        # Capture any other unexpected exception during main function execution.
         full_traceback = traceback.format_exc()
-        print(f"Erreur pendant l'exécution de MAIN dans le thread:\n{full_traceback}")
-        # Émission du signal d'erreur vers le thread de l'interface graphique.
+        # Emit the error signal to the GUI thread for display in an error message box.
         signals['error'].emit(full_traceback)
+
     finally:
-        # Ce bloc est toujours exécuté, que la tâche ait réussi, échoué ou ait été interrompue.
-        # Émission du signal de fin pour permettre à l'interface graphique d'effectuer le nettoyage.
+        # This block is executed regardless of success, unhandled error, or interruption.
+        # Emit the finished signal to allow the GUI thread to perform necessary cleanup.
         signals['finished'].emit()
