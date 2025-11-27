@@ -16,6 +16,6 @@ Linux: pyinstaller  --windowed --icon=GUI/assets/FragHub_Python_icon.ico --name=
 
 
 
-Windows: pyinstaller --onefile --windowed --icon="setup_gui/assets/FragHub_Python_icon.ico" --add-data "setup_gui/assets;setup_gui/assets" --add-data "FragHub_Windows_1.4.2.zip;." --name=FragHub_1.4.2_setup_windows_x64 Setup.py
+Windows: pyinstaller --onefile --windowed --icon="setup_gui/assets/FragHub_Python_icon.ico" --add-data "setup_gui/assets;setup_gui/assets" --add-data "FragHub_Windows_1.4.2_x64.zip;." --name=FragHub_1.4.2_setup_windows_x64 Setup.py
 
-Linux: pyinstaller --onefile --windowed --icon="setup_gui/assets/FragHub_Python_icon.ico" --add-data "setup_gui/assets:setup_gui/assets" --add-data "FragHub_Linux_1.4.2.zip:." --name=FragHub_1.4.2_setup_Linux_x64 Setup.py
+Linux: pyinstaller --onefile --windowed --icon="setup_gui/assets/FragHub_Python_icon.ico" --add-data "setup_gui/assets:setup_gui/assets" --add-data "FragHub_Linux_1.4.2_x64.zip:." --name=FragHub_1.4.2_setup_Linux_x64 Setup.py
