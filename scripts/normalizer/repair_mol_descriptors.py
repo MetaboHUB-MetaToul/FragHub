@@ -4,83 +4,92 @@ import re
 
 def repair_inchi(metadata_dict):
     """
-    This function 'repair_inchi' is used to fix the 'INCHI' value in the given metadata dictionary if it exists.
+    Fixes the 'INCHI' value by ensuring it starts with the canonical prefix "InChI=".
 
-    The INCHI string is fixed by replacing the leading pattern determined by 'repair_inchi_pattern' regex with "InChI=".
+    This function replaces common incorrect leading patterns in the InChI string
+    with the required prefix, if the 'INCHI' field is not empty.
 
-    :param metadata_dict: A dictionary containing metadata of a molecule. The 'INCHI' key in this dictionary is updated.
-
-    :return: The same metadata dictionary with the updated 'INCHI' key if it was present initially.
-
-    Note: If the 'INCHI' key is not in the dictionary or its value was None, then the dictionary is returned as it is, without any modification.
+    :param metadata_dict: A dictionary containing spectrum metadata, including the 'INCHI' key.
+    :type metadata_dict: dict
+    :return: The metadata dictionary with the potentially updated 'INCHI' string.
+    :rtype: dict
     """
+    inchi = metadata_dict.get('INCHI')
 
-    # Extraction of InChI string from metadata dictionary
-    inchi = metadata_dict['INCHI']
-
-    # If InChI string is present, the function modifies it.
     if inchi:
-        # Replacing the pattern with "InChI=" in the existing InChI string
+        # Replace the determined incorrect pattern with the canonical "InChI=".
         inchi = re.sub(scripts.globals_vars.repair_inchi_pattern, "InChI=", inchi)
-
-        # Updating the InChI key in metadata dictionary with the modified InChI string
         metadata_dict['INCHI'] = inchi
 
-    # Metadata dictionary is returned (modified or unmodified)
     return metadata_dict
 
 
 def repair_mol_descriptors(metadata_dict):
     """
-    Repairs molecular descriptors in a dictionary containing SMILES, InChI, and InChIKey.
-    Check if molecular descriptors are in the dedicated field.
-    """
+    Corrects common misplacements of molecular descriptors (SMILES, InChI, InChIKey)
+    among their respective fields in the metadata dictionary.
 
-    # Assigning the values of SMILES, InChI, and InChIKey into respective variables
+    The function checks if a field contains a value that matches the pattern of
+    a *different* descriptor and swaps them accordingly to place the descriptor
+    in its correct key (e.g., if SMILES is found in the INCHI field, it is moved
+    to the SMILES field).
+
+    :param metadata_dict: A dictionary containing spectrum metadata with keys:
+                          'SMILES', 'INCHI', and 'INCHIKEY'.
+    :type metadata_dict: dict
+    :return: The metadata dictionary with standardized descriptor placement.
+    :rtype: dict
+    """
+    # Use local variables for easier access and modification.
     smiles = metadata_dict['SMILES']
     inchi = metadata_dict['INCHI']
     inchikey = metadata_dict['INCHIKEY']
 
-    # If the respective patterns match the respective values, repair the InChI and return the updated dict
-    if re.search(scripts.globals_vars.smiles_pattern, smiles) and re.search(scripts.globals_vars.inchi_pattern, inchi) and re.search(scripts.globals_vars.inchikey_pattern, inchikey):
+    # --- Initial Check for Correct Placement ---
+    # If all fields are correctly formatted, apply InChI repair and return early.
+    if (re.search(scripts.globals_vars.smiles_pattern, smiles) and
+            re.search(scripts.globals_vars.inchi_pattern, inchi) and
+            re.search(scripts.globals_vars.inchikey_pattern, inchikey)):
         metadata_dict = repair_inchi(metadata_dict)
         return metadata_dict
 
-    # If the patterns of InChI and InChIKey do not match but SMILES pattern matches InChI,
-    # then update InChI value to SMILES and set the InChI to blank
+    # --- Cross-Field Repair Logic ---
+    # Note: These checks are sequential. If a value is moved, its original field
+    # becomes blank (''), preventing infinite loops or double-swapping based on old values.
+
+    # 1. SMILES found in INCHI field: Move INCHI content to SMILES, clear INCHI.
     if re.search(scripts.globals_vars.smiles_pattern, inchi):
         if not re.search(scripts.globals_vars.inchi_pattern, inchi) and not re.search(scripts.globals_vars.inchikey_pattern, inchi):
             metadata_dict['SMILES'] = inchi
             metadata_dict['INCHI'] = ''
 
-    # If the patterns of InChi and InChiKey do not match but SMILES pattern matches InChIKey,
-    # update the InChIKey value to SMILES and set the InChIKey to blank
+    # 2. SMILES found in INCHIKEY field: Move INCHIKEY content to SMILES, clear INCHIKEY.
     if re.search(scripts.globals_vars.smiles_pattern, inchikey):
         if not re.search(scripts.globals_vars.inchi_pattern, inchikey) and not re.search(scripts.globals_vars.inchikey_pattern, inchikey):
             metadata_dict['SMILES'] = inchikey
             metadata_dict['INCHIKEY'] = ''
 
-    # If SMILES matches InChI pattern, set the InChI to SMILES and set SMILES to blank
+    # 3. INCHI pattern found in SMILES field: Move SMILES content to INCHI, clear SMILES.
     if re.search(scripts.globals_vars.inchi_pattern, smiles):
         metadata_dict['INCHI'] = smiles
         metadata_dict['SMILES'] = ''
 
-    # If InChIKey matches InChI pattern, set the InChI to InChIKey and set the InChiKey to blank
+    # 4. INCHI pattern found in INCHIKEY field: Move INCHIKEY content to INCHI, clear INCHIKEY.
     if re.search(scripts.globals_vars.inchi_pattern, inchikey):
         metadata_dict['INCHI'] = inchikey
         metadata_dict['INCHIKEY'] = ''
 
-    # If InChI matches InChiKey pattern, set the InChiKey to InChI and set InChI to blank
+    # 5. INCHIKEY pattern found in INCHI field: Move INCHI content to INCHIKEY, clear INCHI.
     if re.search(scripts.globals_vars.inchikey_pattern, inchi):
         metadata_dict['INCHIKEY'] = inchi
         metadata_dict['INCHI'] = ''
 
+    # 6. INCHIKEY pattern found in SMILES field: Move SMILES content to INCHIKEY, clear SMILES.
     if re.search(scripts.globals_vars.inchikey_pattern, smiles):
         metadata_dict['INCHIKEY'] = smiles
         metadata_dict['SMILES'] = ''
 
-    # Again call the repair InChI function to repair and update the InChI
+    # Final step: Ensure the INCHI field has the correct prefix after any potential swaps.
     metadata_dict = repair_inchi(metadata_dict)
 
-    # Return the updated metadata dictionary
     return metadata_dict

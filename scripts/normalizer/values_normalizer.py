@@ -1,64 +1,70 @@
-from scripts.normalizer.normalize_instruments_and_resolution import *
-from scripts.normalizer.missing_precursormz_re_calculation import *
-from scripts.normalizer.delete_no_smiles_no_inchi import *
-from scripts.normalizer.normalize_retentiontime import *
-from scripts.normalizer.repair_mol_descriptors import *
-from scripts.normalizer.check_for_bad_adduct import *
-from scripts.normalizer.normalize_ionization import *
-from scripts.normalizer.normalize_predicted import *
-from scripts.normalizer.normalize_ms_level import *
-from scripts.normalizer.normalize_empties import *
-from scripts.normalizer.normalize_ionmode import *
-from scripts.normalizer.normalize_adduct import *
+from scripts.normalizer.normalize_instruments_and_resolution import normalize_instruments_and_resolution
+from scripts.normalizer.missing_precursormz_re_calculation import missing_precursormz_re_calculation
+from scripts.normalizer.delete_no_smiles_no_inchi import delete_no_smiles_no_inchi_no_inchikey
+from scripts.normalizer.normalize_retentiontime import normalize_retention_time
+from scripts.normalizer.repair_mol_descriptors import repair_mol_descriptors
+from scripts.normalizer.check_for_bad_adduct import check_for_bad_adduct
+from scripts.normalizer.normalize_ionization import normalize_ionization
+from scripts.normalizer.normalize_predicted import normalize_predicted
+from scripts.normalizer.normalize_ms_level import normalize_ms_level
+from scripts.normalizer.normalize_empties import normalize_empties
+from scripts.normalizer.normalize_ionmode import normalize_ion_mode
+from scripts.normalizer.normalize_adduct import normalize_adduct
 
 
 def normalize_values(metadata_dict):
     """
-    This function takes in a metadata dictionary and applies numerous normalization functions on it to standardize its values.
+    Applies a sequence of normalization and validation functions to standardize
+    the values within a spectrum's metadata dictionary.
 
-    :param metadata_dict: A dictionary containing metadata information.
-    :return: The normalized metadata dictionary.
+    The sequence is critical, performing cleanup and structural repair first,
+    then checking for mandatory identifiers, and finally normalizing and validating
+    physico-chemical properties.
+
+    :param metadata_dict: A dictionary containing spectrum metadata.
+    :type metadata_dict: dict
+    :return: The normalized metadata dictionary, or None if the spectrum is marked for deletion.
+    :rtype: dict or None
     """
-    # Replace any missing or 'NaN' values with appropriate values
+    # --- Phase 1: Cleanup and Structural Repair ---
+    # 1. Standardize various null/empty representations to an empty string.
     metadata_dict = normalize_empties(metadata_dict)
 
-    # Repair molecular descriptors in the metadata
+    # 2. Correct misplacement of chemical identifiers (SMILES, InChI, InChIKey).
     metadata_dict = repair_mol_descriptors(metadata_dict)
 
-    # If both 'SMILES' and 'INCHI' keys in the dictionary
-    # do not exist (have NaN values), we delete the dictionary.
+    # 3. Check for mandatory chemical identifiers; deletes the spectrum if all are missing.
     metadata_dict = delete_no_smiles_no_inchi_no_inchikey(metadata_dict)
 
-    # If after the above operations the metadata_dict is not empty continue with the normalization
+    # --- Phase 2: Property Normalization and Recalculation (requires metadata existence) ---
     if metadata_dict:
-        # Normalize Ionization in the metadata
+        # 4. Normalize the Ionization method (e.g., APCI, ESI).
         metadata_dict = normalize_ionization(metadata_dict)
 
-        # Normalize the instruments and resolution data in the metadata
+        # 5. Determine and normalize instrument/resolution based on catalogue lookup.
         metadata_dict = normalize_instruments_and_resolution(metadata_dict)
 
-        # Normalize adduct data in the metadata
+        # 6. Normalize the precursor type (adduct) to its canonical form.
         metadata_dict = normalize_adduct(metadata_dict)
 
-        # If 'PRECURSORMZ' key does not exist in the metadata_dict
-        # or no recalculation is needed, perform recalculation
+        # 7. Recalculate/repair missing or invalid PRECURSORMZ using molecular mass and adduct.
         metadata_dict = missing_precursormz_re_calculation(metadata_dict)
 
-        # Normalize the ion mode in the metadata, from long form to short standardized form
-        metadata_dict = normalize_ionmode(metadata_dict)
+        # 8. Standardize the ionization mode ("positive" or "negative").
+        metadata_dict = normalize_ion_mode(metadata_dict)
 
-        # Normalize the predicted value in the metadata
+        # 9. Standardize the predicted/in-silico status ("true" or "false").
         metadata_dict = normalize_predicted(metadata_dict)
 
-        # ckeck if adduct in pos is really pos (exemple)
+        # 10. Validate adduct consistency against the ionization mode; deletes if inconsistent.
         metadata_dict = check_for_bad_adduct(metadata_dict)
 
+        # --- Phase 3: Final Property Standardization (requires passing Phase 2 deletion check) ---
         if metadata_dict:
-
-            # Normalize MS level
+            # 11. Normalize the MS level.
             metadata_dict = normalize_ms_level(metadata_dict)
 
-            # Normalize Retention Time in the metadata which can be represented in different units
-            metadata_dict = normalize_retentiontime(metadata_dict)
+            # 12. Normalize Retention Time units to minutes.
+            metadata_dict = normalize_retention_time(metadata_dict)
 
     return metadata_dict

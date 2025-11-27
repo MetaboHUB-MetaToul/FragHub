@@ -2,25 +2,30 @@ import scripts.globals_vars
 import re
 
 
-def normalize_ionmode(metadata_dict):
+def normalize_ion_mode(metadata_dict):
     """
-    :param metadata_dict: A dictionary containing metadata information.
-        It should have the key "IONMODE" to represent the ionization mode.
-    :return: The updated metadata dictionary with the "IONMODE" value normalized to either "positive" or "negative".
+    Standardizes the ionization mode field ('IONMODE') in the metadata dictionary.
+
+    The function uses predefined regular expression patterns to identify if the
+    current value corresponds to a positive or negative ionization mode, and then
+    normalizes it to "positive" or "negative" respectively.
+
+    :param metadata_dict: A dictionary containing spectrum metadata, including the "IONMODE" key.
+    :type metadata_dict: dict
+    :return: The updated metadata dictionary with the "IONMODE" value normalized.
+    :rtype: dict
     """
 
-    # get the value of "IONMODE" from the metadata dictionary
-    ionmode = metadata_dict["IONMODE"]
+    ion_mode = metadata_dict["IONMODE"]
 
-    # If the pattern for positive ion mode is found in ion mode, change it to normalized form "positive"
-    if re.search(scripts.globals_vars.ionmode_pos_pattern, ionmode):
-        ionmode = "positive"
-    # If the pattern for negative ion mode is found in ion mode, change it to normalized form "negative"
-    elif re.search(scripts.globals_vars.ionmode_neg_pattern, ionmode):
-        ionmode = "negative"
+    # Check if the value matches the pattern for positive ion mode.
+    if re.search(scripts.globals_vars.ionmode_pos_pattern, ion_mode):
+        ion_mode = "positive"
+    # Check if the value matches the pattern for negative ion mode.
+    elif re.search(scripts.globals_vars.ionmode_neg_pattern, ion_mode):
+        ion_mode = "negative"
 
-    # update the "IONMODE" key in metadata dictionary with normalized ion mode value
-    metadata_dict["IONMODE"] = ionmode
+    # Update the dictionary with the normalized value.
+    metadata_dict["IONMODE"] = ion_mode
 
-    # return the updated metadata dictionary
     return metadata_dict

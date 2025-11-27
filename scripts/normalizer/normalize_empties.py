@@ -5,19 +5,27 @@ import re
 
 def normalize_empties(metadata_dict):
     """
-    Normalizes empties in a metadata dictionary.
-    :param metadata_dict: the dictionary containing metadata
-    :return: the updated metadata dictionary
+    Standardizes empty or null-like values within the metadata dictionary to an empty string ('').
+
+    This process handles:
+    1. String values that match a predefined "empty pattern" (e.g., 'NA', 'NULL').
+    2. Floating-point numbers, including numpy types, that are Not a Number (NaN).
+
+    :param metadata_dict: The dictionary containing spectrum metadata.
+    :type metadata_dict: dict
+    :return: The metadata dictionary with standardized empty values.
+    :rtype: dict
     """
-    for k, v in metadata_dict.items():  # traversing all items (key-value pairs) in the dictionary
+    for k, v in metadata_dict.items():
+        # Check if the value is a string.
+        if isinstance(v, str):
+            # If the string matches the global 'empty_pattern' regex, replace it with an empty string.
+            if re.fullmatch(scripts.globals_vars.empty_pattern, v):
+                metadata_dict[k] = ''
 
-        if isinstance(v, str):  # if the value is a string
-            if re.fullmatch(scripts.globals_vars.empty_pattern, v):  # if the value matches the 'empty_pattern' regex
-                metadata_dict[k] = ''  # replace value in dictionary with empty string
-
-        # if the value is a float or numpy float and is NaN,
-        # replace the value in dictionary with empty string
+        # Check if the value is a standard float or a numpy float type AND is NaN.
         elif isinstance(v, (float, np.float64)) and np.isnan(v):
+            # Replace NaN values with an empty string for consistency.
             metadata_dict[k] = ''
 
-    return metadata_dict  # return updated dictionary
+    return metadata_dict
