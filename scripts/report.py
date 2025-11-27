@@ -52,7 +52,7 @@ def calculate_spectrum_number(POS_LC_df, POS_LC_In_Silico_df, POS_GC_df, POS_GC_
     :param NEG_GC_insilico: DataFrame containing negative GC in-silico data.
     """
 
-    # Mise à jour des clés dans le dictionnaire global `report_dict`
+    # Updating keys in the global `report_dict` dictionary**
     scripts.global_report.report_dict["pos_lc_exp_spectrum_number"] = len(POS_LC_df)
     scripts.global_report.report_dict["neg_lc_exp_spectrum_number"] = len(NEG_LC_df)
     scripts.global_report.report_dict["pos_lc_insilico_spectrum_number"] = len(POS_LC_In_Silico_df)
