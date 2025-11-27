@@ -8,30 +8,51 @@ import scripts.deletion_report
 from numba import jit
 import numpy as np
 
+
 @jit(nopython=True, nogil=True)
 def remove_non_positive_peaks(peak_array: np.ndarray) -> np.ndarray:
     """
-    Supprime les pics dont l'intensité est inférieure ou égale à zéro.
+    Removes peaks whose intensity is less than or equal to zero.
 
-    :param peak_array: Un tableau NumPy contenant les données des pics. La première colonne
-                       doit contenir les valeurs m/z et la deuxième colonne les intensités.
+    This function is optimized for speed using Numba (jit).
 
-    :return: Le tableau NumPy filtré qui inclut uniquement les pics avec une intensité
-             strictement positive.
+    :param peak_array: A NumPy array containing peak data. The second column
+                       (index 1) must contain the peak intensities.
+    :type peak_array: np.ndarray
+    :return: The filtered NumPy array including only peaks with strictly positive intensity.
+    :rtype: np.ndarray
     """
-    # Conserve uniquement les lignes où la valeur de la deuxième colonne (intensité) est > 0
+    # Keep only rows where the value in the second column (intensity) is > 0
     return peak_array[peak_array[:, 1] > 0]
+
 
 def apply_filters(spectrum, peak_array, precursormz, parameters_dict):
     """
-    Function to apply various filters on a given peak_array according to the provided parameters.
+    Applies a sequence of mass spectrometry peak list filters based on the
+    provided configuration dictionary.
 
-    :param peak_array: the input numpy array containing peak information
-    :param precursormz: the precursor m/z value
-    :param parameters_dict: a dictionary containing various filtering parameters
-    :return: a filtered numpy array containing peak information
+    The application order is critical for the intended processing logic:
+    1. Remove non-positive peaks
+    2. Check minimum required peaks (count)
+    3. Remove peaks above the precursor m/z
+    4. Reduce peak list (max number of peaks)
+    5. Normalize intensity
+    6. Keep peaks within a user-defined m/z range
+    7. Check minimum number of high-intensity peaks
+
+    :param spectrum: The spectrum object/dictionary (used for logging deletions).
+    :param peak_array: The input NumPy array [m/z, intensity] containing peak information.
+    :type peak_array: np.ndarray
+    :param precursormz: The precursor m/z value, used for one specific filter.
+    :type precursormz: float or None
+    :param parameters_dict: A dictionary containing filtering flags (1.0 or 0.0)
+                            and their respective parameter values.
+    :type parameters_dict: dict
+    :return: The filtered NumPy array [m/z, intensity] or an empty array if
+             a critical filter caused all peaks to be removed.
+    :rtype: np.ndarray
     """
-    # retrieve filtering parameters from the dictionary
+    # Retrieve filtering parameters from the configuration dictionary
     n_peaks = parameters_dict['check_minimum_peak_requiered_n_peaks']
     max_peaks = parameters_dict['reduce_peak_list_max_peaks']
     mz_from = parameters_dict['keep_mz_in_range_from_mz']
@@ -39,54 +60,55 @@ def apply_filters(spectrum, peak_array, precursormz, parameters_dict):
     intensity_percent = parameters_dict['check_minimum_of_high_peaks_requiered_intensity_percent']
     no_peaks = parameters_dict['check_minimum_of_high_peaks_requiered_no_peaks']
 
+    # --- Step 1: Mandatory filter to remove invalid intensity peaks ---
     peak_array = remove_non_positive_peaks(peak_array)
 
-    # apply filters in a sequence
+    # --- Step 2: Apply conditional filters in sequence ---
+
+    # Filter 1: Check minimum required peak count
     if parameters_dict['check_minimum_peak_requiered'] == 1.0:
-        # filter out peaks below a minimum threshold
         peak_array = check_minimum_peak_requiered(spectrum, peak_array, n_peaks)
-        # if no peaks pass this filter, return an empty array
         if peak_array.size == 0:
             return np.empty((0, 2), dtype=np.float64)
 
+    # Filter 2: Remove peaks above precursor m/z
     if parameters_dict['remove_peak_above_precursormz'] == 1.0 and precursormz is not None:
-        # remove peaks that are above a specified limit
         peak_array = remove_peak_above_precursormz(peak_array, precursormz)
-        # if no peaks pass this filter, return an empty array
         if peak_array.size == 0:
+            # Log deletion reason and update report
             spectrum['DELETION_REASON'] = "spectrum deleted because peaks list is empty after removing peaks above precursor m/z"
             scripts.deletion_report.deleted_spectrum_list.append(spectrum)
             scripts.deletion_report.all_peaks_above_precursor_mz += 1
             return np.empty((0, 2), dtype=np.float64)
 
+    # Filter 3: Reduce peak list to a maximum number of peaks
     if parameters_dict['reduce_peak_list'] == 1.0:
-        # limit total number of peaks to be considered
         peak_array = reduce_peak_list(peak_array, max_peaks)
 
+    # Filter 4: Normalize peak intensity (sets maximum intensity to 1.0)
     if parameters_dict['normalize_intensity'] == 1.0:
-        # normalize the intensity of peaks
         peak_array = normalize_intensity(peak_array)
-        # if no peaks pass this filter, return an empty array
         if peak_array.size == 0:
             return np.empty((0, 2), dtype=np.float64)
 
+    # Filter 5: Keep peaks within a user-defined m/z range
     if parameters_dict['keep_mz_in_range'] == 1.0:
-        # keep peaks within a certain mz range
         peak_array = keep_mz_in_range(peak_array, mz_from, mz_to)
         if peak_array.size == 0:
+            # Log deletion reason and update report
             spectrum['DELETION_REASON'] = "spectrum deleted because peaks list is empty after removing peaks out of mz range choiced by the user"
             scripts.deletion_report.deleted_spectrum_list.append(spectrum)
             scripts.deletion_report.no_peaks_in_mz_range += 1
             return np.empty((0, 2), dtype=np.float64)
 
+    # Filter 6: Check minimum number of high-intensity peaks required
     if parameters_dict['check_minimum_of_high_peaks_requiered'] == 1.0:
-        # filter out peaks below a minimum intensity percent
         peak_array = check_minimum_of_high_peaks_requiered(peak_array, intensity_percent, no_peaks)
-        # if no peaks pass the filters, return an empty array
         if peak_array.size == 0:
+            # Log deletion reason and update report
             spectrum['DELETION_REASON'] = "spectrum deleted because peaks list does not contain minimum number of high peaks required according to the value choiced by the user"
             scripts.deletion_report.deleted_spectrum_list.append(spectrum)
             return np.empty((0, 2), dtype=np.float64)
 
-    # return the filtered peak array
+    # Return the final filtered peak array
     return peak_array
