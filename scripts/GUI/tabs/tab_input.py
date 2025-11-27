@@ -1,85 +1,116 @@
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QPushButton, QSpacerItem, QSizePolicy, QLabel, QHBoxLayout, QComboBox
+from PyQt6.QtWidgets import (
+    QWidget, QVBoxLayout, QPushButton, QSpacerItem, QSizePolicy, QLabel,
+    QHBoxLayout, QComboBox, QFileDialog
+)
 from PyQt6.QtGui import QFont, QIcon
 from PyQt6.QtCore import QSize, Qt
-from PyQt6.QtWidgets import QFileDialog
-from scripts.GUI.utils.global_vars import parameters_dict  # Import the global dictionary
+from scripts.GUI.utils.global_vars import parameters_dict
 import os
 import sys
 
-# If the file is executed as a PyInstaller executable
+
+# Determine the base directory for resource files, handling PyInstaller executable or script execution.
 if getattr(sys, 'frozen', False):
+    # Base directory when running as a frozen executable.
     BASE_DIR = sys._MEIPASS
 else:
-    # If the file is executed as a Python script
+    # Base directory when running as a Python script.
     BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 
 
 class InputTab(QWidget):
+    """
+    GUI tab for selecting input files (json, csv, msp, mgf).
+    It manages the file selection button and displays selected files in a dropdown.
+    """
     def __init__(self):
         super().__init__()
         self.layout = QVBoxLayout()
+        self.file_menu = None
 
-        # Add spacers for vertical centering
-        self.layout.addSpacerItem(QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
+        self.setup_ui()
+        self.setLayout(self.layout)
 
-        # Create the file selection button
+    def setup_ui(self):
+        """Sets up the layout and widgets for the Input Tab."""
+
+        # Spacer to push content to the vertical center.
+        self.layout.addSpacerItem(
+            QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
+        )
+
+        # --- File Selection Button ---
         button = QPushButton()
-        button.setIcon(QIcon(os.path.join(BASE_DIR,'./GUI/assets/files_icon.png')))
+        # Load the icon from the assets directory.
+        icon_path = os.path.join(BASE_DIR, './GUI/assets/files_icon.png')
+        button.setIcon(QIcon(icon_path))
         button.setIconSize(QSize(128, 128))
         button.setFixedSize(140, 140)
-        button.clicked.connect(self.browse_files)  # Connect the function
+        # Connect the click event to the file browsing handler.
+        button.clicked.connect(self.browse_files)
 
-        # Center the button
+        # Layout to center the button horizontally.
         button_layout = QHBoxLayout()
         button_layout.addWidget(button, alignment=Qt.AlignmentFlag.AlignCenter)
         self.layout.addLayout(button_layout)
 
-        # Add label below the button
+        # --- Label below the button ---
         label = QLabel("Select input files")
         label.setFont(QFont("Arial", 14, QFont.Weight.Bold))
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.layout.addWidget(label)
 
-        # Add a dropdown menu below the label
+        # --- Dropdown Menu for selected files ---
         self.file_menu = QComboBox()
         self.file_menu.setFixedWidth(200)
-        self.file_menu.setPlaceholderText("No files selected")  # Initial text
+        self.file_menu.setPlaceholderText("No files selected")
         self.layout.addWidget(self.file_menu, alignment=Qt.AlignmentFlag.AlignCenter)
 
-        # Spacing and info button
-        self.layout.addSpacerItem(QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
+        # Spacer to push the info button down.
+        self.layout.addSpacerItem(
+            QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
+        )
 
+        # --- Info button in the bottom right ---
         info_button_layout = QHBoxLayout()
-        info_button_layout.addSpacerItem(QSpacerItem(40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum))
+        # Spacer to push the info button to the right.
+        info_button_layout.addSpacerItem(
+            QSpacerItem(40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        )
 
         info_button = QPushButton("🛈")
         info_button.setFixedSize(30, 30)
-        info_button.setToolTip("Select single or multiple .json, .csv, .msp, or .mgf files")
+        info_button.setToolTip(
+            "Select single or multiple .json, .csv, .msp, or .mgf files"
+        )
         info_button_layout.addWidget(info_button, alignment=Qt.AlignmentFlag.AlignRight)
         self.layout.addLayout(info_button_layout)
 
-        self.setLayout(self.layout)
-
     def browse_files(self):
-        """File selection handler for the INPUT tab."""
-        # Set the machine's root directory as the starting point
+        """
+        Opens a file dialog for the user to select one or multiple input files.
+        Updates the global parameters and the file list dropdown upon successful selection.
+        """
+        # Start the dialog from the machine's root directory.
         start_directory = os.path.abspath(os.sep)
 
         files, _ = QFileDialog.getOpenFileNames(
             self,
             "Choose files",
-            start_directory  # Add the starting directory
+            start_directory,
+            # File filter can be added here if needed, but omitted for maximum flexibility:
+            # "Mass Spectrometry Files (*.json *.csv *.msp *.mgf)"
         )
+
         if files:
-            # Update the global dictionary
+            # Update the global dictionary with the full list of selected file paths.
             parameters_dict["input_directory"] = files
 
-            # Add the file names to the dropdown menu
-            self.file_menu.clear()  # Clear the existing menu
+            # Populate the dropdown menu with only the base names of the files.
+            self.file_menu.clear()
             for file_path in files:
-                basename = os.path.basename(file_path)  # Get just the file name
-                self.file_menu.addItem(basename)  # Add to the dropdown menu
+                basename = os.path.basename(file_path)
+                self.file_menu.addItem(basename)
 
-            # Display the first file directly if available
-            if files:
-                self.file_menu.setCurrentText(os.path.basename(files[0]))
+            # Set the dropdown to display the first selected file.
+            self.file_menu.setCurrentText(os.path.basename(files[0]))
