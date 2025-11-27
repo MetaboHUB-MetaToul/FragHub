@@ -52,7 +52,7 @@ class MainWindow(QMainWindow):
             Qt.WindowType.Window | Qt.WindowType.WindowMinimizeButtonHint | Qt.WindowType.WindowCloseButtonHint
         )
         self.main_function = main_function_ref
-        self.setWindowTitle("FragHub 1.4.1")
+        self.setWindowTitle("FragHub 1.4.2")
         self.setGeometry(100, 100, 1280, 720)
 
         # QStackedWidget to manage different views (config vs. progress).
