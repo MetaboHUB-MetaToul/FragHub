@@ -77,11 +77,41 @@ import { useState } from '#imports'
 const activeTab = ref('input')
 const isDarkMode = ref(false)
 
+// Dans app.vue
 const parameters = useState('parameters', () => ({
+  // InputTab
   input_directory: [],
+
+  // OutputTab
   output_directory: "",
-  calculate_de_novo: false,
+
+  // FiltersTab
+  normalize_intensity: 1.0,
+  remove_peak_above_precursormz: 1.0,
+  check_minimum_peak_requiered: 1.0,
+  check_minimum_peak_requiered_n_peaks: 3.0,
+  reduce_peak_list: 1.0,
+  reduce_peak_list_max_peaks: 500.0,
+  remove_spectrum_under_entropy_score: 1.0,
+  remove_spectrum_under_entropy_score_value: 0.5,
+  keep_mz_in_range: 1.0,
+  keep_mz_in_range_from_mz: 50.0,
+  keep_mz_in_range_to_mz: 2000.0,
+  check_minimum_of_high_peaks_requiered: 1.0,
+  check_minimum_of_high_peaks_requiered_intensity_percent: 5.0,
+  check_minimum_of_high_peaks_requiered_no_peaks: 2.0,
+
+  // DeNovoTab
+  calculate_de_novo: 0.0,
   de_novo_ppm_tolerance: 10.0,
+
+  // OutputSettingTab
+  csv: 1.0,
+  msp: 1.0,
+  json: 1.0,
+
+  // ProjectsTab
+  reset_updates: 0.0
 }))
 
 // Gestion du mode sombre (Import dynamique pour éviter l'erreur SSR)
@@ -101,8 +131,28 @@ onMounted(async () => {
 })
 
 const startExecution = async () => {
-  console.log("Paramètres envoyés :", parameters.value)
+  // On crée une copie propre de l'objet pour l'envoi
+  const payload = { ...parameters.value }
+
+  console.log("Envoi des paramètres complets au serveur :", payload)
+
+  // Si tu es dans Electron, tu utiliseras window.electronAPI pour appeler ton script Python
+  if (window.electronAPI) {
+    try {
+      const result = await window.electronAPI.runAnalysis(payload)
+      console.log("Analyse terminée :", result)
+    } catch (error) {
+      console.error("Erreur lors de l'analyse :", error)
+    }
+  } else {
+    // Fallback pour test web (fetch vers FastAPI par exemple)
+    // await fetch('http://localhost:8000/run', { method: 'POST', body: JSON.stringify(payload) })
+  }
+
+  // On lance l'écran de chargement
+  isExecuting.value = true
 }
+
 </script>
 
 <style scoped>
