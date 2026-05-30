@@ -13,6 +13,7 @@
         </div>
 
         <v-card
+            v-if="!isExecuting"
             class="w-100 h-100 d-flex flex-column bg-transparent"
             elevation="0"
         >
@@ -53,17 +54,21 @@
               <v-tabs-window-item value="projects" class="h-100"><ProjectsTab /></v-tabs-window-item>
             </v-tabs-window>
           </v-card-text>
+
+          <v-btn
+              color="success"
+              size="x-large"
+              elevation="8"
+              class="start-btn text-h6 font-weight-bold"
+              @click="startExecution"
+              :disabled="!isBackendReady"
+              :loading="!isBackendReady"
+          >
+            {{ isBackendReady ? 'START' : 'INITIALIZING...' }}
+          </v-btn>
         </v-card>
 
-        <v-btn
-            color="success"
-            size="x-large"
-            elevation="8"
-            class="start-btn text-h6 font-weight-bold"
-            @click="startExecution"
-        >
-          START
-        </v-btn>
+        <ProgressView v-else />
 
       </v-container>
     </v-main>
@@ -71,21 +76,19 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useState } from '#imports'
+import ProgressView from '~/components/ProgressView.vue'
 
 const activeTab = ref('input')
 const isDarkMode = ref(false)
+const isExecuting = useState('isExecuting', () => false)
+const isBackendReady = ref(false)
+let checkInterval = null
 
-// Dans app.vue
 const parameters = useState('parameters', () => ({
-  // InputTab
   input_directory: [],
-
-  // OutputTab
   output_directory: "",
-
-  // FiltersTab
   normalize_intensity: 1.0,
   remove_peak_above_precursormz: 1.0,
   check_minimum_peak_requiered: 1.0,
@@ -100,21 +103,32 @@ const parameters = useState('parameters', () => ({
   check_minimum_of_high_peaks_requiered: 1.0,
   check_minimum_of_high_peaks_requiered_intensity_percent: 5.0,
   check_minimum_of_high_peaks_requiered_no_peaks: 2.0,
-
-  // DeNovoTab
   calculate_de_novo: 0.0,
   de_novo_ppm_tolerance: 10.0,
-
-  // OutputSettingTab
   csv: 1.0,
   msp: 1.0,
   json: 1.0,
-
-  // ProjectsTab
   reset_updates: 0.0
 }))
 
-// Gestion du mode sombre (Import dynamique pour éviter l'erreur SSR)
+// Vérification de la santé du serveur
+const checkBackendStatus = async () => {
+  try {
+    const response = await fetch('http://127.0.0.1:8000/health')
+    if (response.ok) {
+      console.log("✅ Backend Python prêt !");
+      isBackendReady.value = true
+      clearInterval(checkInterval)
+    } else {
+      // Si tu vois 404 dans la console, c'est la preuve du serveur fantôme
+      console.warn("⚠️ Le backend répond, mais avec une erreur :", response.status);
+    }
+  } catch (err) {
+    // Si tu vois ça, c'est que le serveur Python ne tourne pas du tout
+    console.log("⏳ Serveur Python injoignable (Crash ou démarrage en cours)...");
+  }
+}
+
 watch(isDarkMode, async (val) => {
   const DarkReader = await import('darkreader')
   if (val) {
@@ -124,39 +138,40 @@ watch(isDarkMode, async (val) => {
   }
 })
 
-// Désactiver le mode sombre au chargement
 onMounted(async () => {
   const DarkReader = await import('darkreader')
   DarkReader.disable()
+
+  // Lance la vérification toutes les secondes
+  checkInterval = setInterval(checkBackendStatus, 1000)
+  checkBackendStatus() // Premier appel immédiat
+})
+
+onUnmounted(() => {
+  if (checkInterval) clearInterval(checkInterval)
 })
 
 const startExecution = async () => {
-  // On crée une copie propre de l'objet pour l'envoi
-  const payload = { ...parameters.value }
+  try {
+    const response = await fetch('http://127.0.0.1:8000/run-analysis', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(parameters.value),
+    })
 
-  console.log("Envoi des paramètres complets au serveur :", payload)
-
-  // Si tu es dans Electron, tu utiliseras window.electronAPI pour appeler ton script Python
-  if (window.electronAPI) {
-    try {
-      const result = await window.electronAPI.runAnalysis(payload)
-      console.log("Analyse terminée :", result)
-    } catch (error) {
-      console.error("Erreur lors de l'analyse :", error)
+    if (response.ok) {
+      isExecuting.value = true
+    } else {
+      const errorData = await response.json()
+      console.error("Erreur serveur :", errorData.detail)
     }
-  } else {
-    // Fallback pour test web (fetch vers FastAPI par exemple)
-    // await fetch('http://localhost:8000/run', { method: 'POST', body: JSON.stringify(payload) })
+  } catch (err) {
+    console.error("Connexion impossible :", err)
   }
-
-  // On lance l'écran de chargement
-  isExecuting.value = true
 }
-
 </script>
 
 <style scoped>
-/* Style du bandeau */
 .tabs-bandeau-wrapper {
   width: 100%;
   background: #2b2b2b;
@@ -164,57 +179,14 @@ const startExecution = async () => {
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
   z-index: 5;
   height: 60px;
-}
-
-.tabs-bandeau {
-  background: transparent !important;
-}
-
-/* Style des onglets */
-.modern-tab {
-  position: relative;
-  color: #B0BEC5 !important;
-  font-weight: 600;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-}
-
-.modern-tab.v-tab--selected {
-  color: #2196F3 !important;
-}
-
-.modern-tab:not(:last-child)::after {
-  content: '';
-  position: absolute;
-  right: 0;
-  top: 35%;
-  height: 30%;
-  width: 2px;
-  background-color: rgba(255, 255, 255, 0.15);
-  border-radius: 2px;
-}
-
-/* Style Logo & Bouton */
-.background-logo {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 0;
-  pointer-events: none;
-  opacity: 0.25;
-  width: 100%;
   display: flex;
-  justify-content: center;
+  align-items: center;
 }
-
-.start-btn {
-  position: absolute;
-  bottom: 30px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 10;
-  min-width: 250px;
-  border-radius: 30px;
-}
+.tabs-bandeau { background: transparent !important; }
+.modern-tab { position: relative; color: #B0BEC5 !important; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; }
+.modern-tab.v-tab--selected { color: #2196F3 !important; }
+.modern-tab:not(:last-child)::after { content: ''; position: absolute; right: 0; top: 35%; height: 30%; width: 2px; background-color: rgba(255, 255, 255, 0.15); border-radius: 2px; }
+.background-logo { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 0; opacity: 0.25; pointer-events: none; width: 100%; display: flex; justify-content: center; }
+.start-btn { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); z-index: 10; min-width: 250px; border-radius: 30px; text-transform: uppercase; letter-spacing: 2px; }
+.v-card { z-index: 1; }
 </style>

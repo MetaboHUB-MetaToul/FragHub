@@ -1,4 +1,4 @@
-from scripts.GUI.utils.global_vars import parameters_dict
+from scripts.backend_vars import parameters_dict
 from scripts.normalizer.mols_calculation import *
 from scripts.complete_from_pubchem_datas import *
 from scripts.convertors.parsing_to_dict import *

@@ -1,14 +1,16 @@
+import sys, os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import asyncio
 import socketio
 import uvicorn
 from fastapi import FastAPI, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-
-# 1. IMPORTS CORRIGÉS : On précise le dossier "scripts" !
-from scripts.MAIN import MAIN
+from MAIN import MAIN
 from scripts.backend_vars import parameters_dict
-# 2. Setup global pour stocker la loop
+
+# 1. Setup global pour stocker la loop
 loop = None
 
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
@@ -18,7 +20,7 @@ app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 app.mount("/socket.io", socket_app)
 
-# 3. Capture de la loop au démarrage de FastAPI
+# 2. Capture de la loop au démarrage de FastAPI
 @app.on_event("startup")
 def startup_event():
     global loop
@@ -52,7 +54,7 @@ class FragHubParams(BaseModel):
     class Config:
         populate_by_name = True
 
-# 4. Fonction d'émission corrigée
+# 3. Fonction d'émission corrigée
 def emit_to_frontend(event, data):
     global loop
     if loop:
@@ -64,6 +66,7 @@ def progress_callback(val): emit_to_frontend('progress', val)
 def step_callback(val): emit_to_frontend('step', val)
 def completion_callback(val): emit_to_frontend('completion', val)
 def deletion_callback(val): emit_to_frontend('deletion', val)
+# ... ajoute les autres si besoin ...
 
 @app.post("/run-analysis")
 async def run_analysis(params: FragHubParams, background_tasks: BackgroundTasks):
@@ -81,6 +84,8 @@ async def run_analysis(params: FragHubParams, background_tasks: BackgroundTasks)
         deletion_callback=deletion_callback
     )
     return {"status": "started"}
+
+# Dans server_api.py, ajoute ceci :
 
 @app.get("/health")
 async def health_check():

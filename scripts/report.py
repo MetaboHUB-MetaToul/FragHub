@@ -1,4 +1,4 @@
-from scripts.GUI.utils.global_vars import parameters_dict
+from scripts.backend_vars import parameters_dict
 from datetime import datetime
 import scripts.deletion_report
 import scripts.global_report

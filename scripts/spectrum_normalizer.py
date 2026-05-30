@@ -1,4 +1,4 @@
-from scripts.GUI.utils.global_vars import parameters_dict
+from scripts.backend_vars import parameters_dict
 from scripts.peaks_filters.entropy_calculation import *
 from scripts.calculate_maximized_chunk_size import *
 from scripts.normalizer.values_normalizer import *

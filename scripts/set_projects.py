@@ -1,4 +1,4 @@
-from scripts.GUI.utils.global_vars import parameters_dict
+from scripts.backend_vars import parameters_dict
 import json
 import os
 

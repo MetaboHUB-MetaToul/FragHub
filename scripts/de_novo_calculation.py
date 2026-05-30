@@ -1,4 +1,4 @@
-from scripts.GUI.utils.global_vars import parameters_dict
+from scripts.backend_vars import parameters_dict
 from scripts.calculate_maximized_chunk_size import *
 from scripts.globals_vars import atoms_of_life
 import concurrent.futures

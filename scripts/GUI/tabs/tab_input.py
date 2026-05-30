@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QFont, QIcon
 from PyQt6.QtCore import QSize, Qt
-from scripts.GUI.utils.global_vars import parameters_dict
+from scripts.backend_vars import parameters_dict
 import os
 import sys
 

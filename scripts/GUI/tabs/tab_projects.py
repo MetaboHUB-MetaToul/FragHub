@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QSize, QTimer
 from PyQt6.QtGui import QPainter, QColor, QBrush, QPen, QFont
-from scripts.GUI.utils.global_vars import parameters_dict
+from scripts.backend_vars import parameters_dict
 
 
 class QToggleSwitch(QWidget):

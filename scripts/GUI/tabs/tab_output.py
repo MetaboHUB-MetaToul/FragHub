@@ -6,7 +6,7 @@ from PyQt6.QtGui import QFont, QIcon
 from PyQt6.QtCore import QSize, Qt, pyqtSignal
 import sys
 import os
-from scripts.GUI.utils.global_vars import parameters_dict
+from scripts.backend_vars import parameters_dict
 
 
 # Determine the base directory for resource files, handling PyInstaller executable or script execution.

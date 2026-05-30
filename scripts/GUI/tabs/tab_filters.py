@@ -6,7 +6,7 @@ from PyQt6.QtGui import QFont, QPainter, QColor, QBrush, QPen
 from PyQt6.QtCore import QSize, pyqtSignal, Qt
 
 # Import the global parameters dictionary for state management.
-from scripts.GUI.utils.global_vars import parameters_dict
+from scripts.backend_vars import parameters_dict
 
 
 class QToggleSwitch(QWidget):
