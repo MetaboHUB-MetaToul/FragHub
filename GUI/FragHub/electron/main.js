@@ -8,11 +8,18 @@ const __dirname = path.dirname(__filename)
 
 function createWindow () {
     const mainWindow = new BrowserWindow({
+        title: 'FragHub',
         width: 1280,
         height: 720,
         minWidth: 960,
         minHeight: 540,
-        backgroundColor: '#ffffff', // <--- AJOUTE CETTE LIGNE ICI
+        backgroundColor: '#ffffff',
+
+        // --- LA NOUVELLE LIGNE EST ICI 👇 ---
+        // On remonte d'un dossier (..) pour sortir de 'electron'
+        // et on va chercher l'image dans 'app/assets'
+        icon: path.join(__dirname, '../app/assets/FragHub_icon.png'),
+
         autoHideMenuBar: true,
         webPreferences: {
             preload: path.join(__dirname, 'preload.cjs'),
