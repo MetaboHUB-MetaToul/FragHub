@@ -16,19 +16,21 @@
             class="w-100 h-100 d-flex flex-column bg-transparent"
             elevation="0"
         >
-          <v-tabs
-              v-model="activeTab"
-              bg-color="transparent"
-              color="primary"
-              align-tabs="center"
-          >
-            <v-tab value="input">INPUT</v-tab>
-            <v-tab value="output">OUTPUT</v-tab>
-            <v-tab value="filters">Filters</v-tab>
-            <v-tab value="denovo">De Novo</v-tab>
-            <v-tab value="output_settings">Output settings</v-tab>
-            <v-tab value="projects">Projects settings</v-tab>
-          </v-tabs>
+          <div class="tabs-bandeau-wrapper">
+            <v-tabs
+                v-model="activeTab"
+                class="tabs-bandeau"
+                align-tabs="center"
+                color="primary"
+            >
+              <v-tab value="input" class="modern-tab">INPUT</v-tab>
+              <v-tab value="output" class="modern-tab">OUTPUT</v-tab>
+              <v-tab value="filters" class="modern-tab">Filters</v-tab>
+              <v-tab value="denovo" class="modern-tab">De Novo</v-tab>
+              <v-tab value="output_settings" class="modern-tab">Output settings</v-tab>
+              <v-tab value="projects" class="modern-tab">Projects settings</v-tab>
+            </v-tabs>
+          </div>
 
           <v-card-text class="flex-grow-1 overflow-y-auto pa-0 pb-16">
             <v-tabs-window v-model="activeTab" class="h-100">
@@ -75,28 +77,70 @@ const startExecution = async () => {
 </script>
 
 <style scoped>
-/* Centre le logo de fond parfaitement au milieu */
+/* ========================================= */
+/* STYLE DU BANDEAU MODERNE (Opaque)         */
+/* ========================================= */
+.tabs-bandeau-wrapper {
+  width: 100%;
+  background: #2b2b2b; /* Gris sombre totalement OPAQUE */
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3); /* Ombre un peu plus prononcée */
+  z-index: 5;
+}
+
+.tabs-bandeau {
+  background: transparent !important;
+}
+
+/* ========================================= */
+/* STYLE DES ONGLETS & SÉPARATEURS           */
+/* ========================================= */
+.modern-tab {
+  position: relative;
+  color: #B0BEC5 !important;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.modern-tab.v-tab--selected {
+  color: #2196F3 !important;
+}
+
+.modern-tab:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 35%;
+  height: 30%;
+  width: 2px;
+  background-color: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+}
+
+/* ========================================= */
+/* LOGO FILIGRANE & BOUTON FLOTTANT          */
+/* ========================================= */
 .background-logo {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  z-index: 0; /* Le place tout au fond */
-  pointer-events: none; /* TRÈS IMPORTANT : Empêche le logo de bloquer les clics de la souris */
-  opacity: 0.10; /* Opacité à 10% pour l'effet filigrane. Ajuste si tu le veux plus ou moins visible */
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.25; /* PASSÉ DE 0.08 à 0.25 pour bien le faire ressortir ! */
   width: 100%;
   display: flex;
   justify-content: center;
 }
 
-/* Fixe le bouton en bas de l'écran, peu importe la taille de la fenêtre */
 .start-btn {
   position: absolute;
   bottom: 30px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 10; /* Le place tout devant */
+  z-index: 10;
   min-width: 250px;
-  border-radius: 30px; /* Un petit arrondi sympa pour un bouton flottant */
+  border-radius: 30px;
 }
 </style>

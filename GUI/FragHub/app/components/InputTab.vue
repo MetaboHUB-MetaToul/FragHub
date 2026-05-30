@@ -93,37 +93,50 @@
 </template>
 
 <script setup>
-// Dans la section <script setup> de InputTab.vue :
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import { useState } from '#imports'
 
 const parameters = useState('parameters')
+
+// ON REMET LA RÉFÉRENCE POUR LE WEB
+const fileInput = ref(null)
 
 const hasFiles = computed(() => {
   return parameters.value.input_directory && parameters.value.input_directory.length > 0
 })
 
-// fileNames continue d'extraire juste le nom pour l'affichage propre dans la liste
 const fileNames = computed(() => {
   if (!hasFiles.value) return []
   return parameters.value.input_directory.map(path => path.split(/[/\\]/).pop())
 })
 
-// === NOUVELLE LOGIQUE ELECTRON ===
+// === LOGIQUE HYBRIDE (ELECTRON + WEB) ===
 const browseFiles = async () => {
-  // On vérifie qu'on est bien dans Electron
   if (window.electronAPI) {
-    // Demande au système d'ouvrir la vraie fenêtre de sélection de fichiers
+    // Si on est dans l'application Electron
     const selectedFiles = await window.electronAPI.selectFiles()
 
     if (selectedFiles && selectedFiles.length > 0) {
       if (!parameters.value.input_directory) parameters.value.input_directory = []
-      // On ajoute les nouveaux chemins absolus à la liste
       parameters.value.input_directory = [...parameters.value.input_directory, ...selectedFiles]
     }
   } else {
-    console.warn("L'API Electron n'est pas disponible. Lancez l'application via Electron.")
+    // Si on est sur le navigateur Web (Fallback), on clique sur l'input caché
+    if (fileInput.value) {
+      fileInput.value.click()
+    }
   }
+}
+
+// ON REMET LA FONCTION POUR GÉRER LA SÉLECTION WEB
+const handleFileChange = (event) => {
+  const files = Array.from(event.target.files)
+  if (files.length > 0) {
+    const newNames = files.map(f => f.name)
+    if (!parameters.value.input_directory) parameters.value.input_directory = []
+    parameters.value.input_directory = [...parameters.value.input_directory, ...newNames]
+  }
+  event.target.value = ''
 }
 
 const removeFile = (index) => {
