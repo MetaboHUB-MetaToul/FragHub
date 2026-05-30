@@ -1,5 +1,5 @@
 <template>
-  <v-app>
+  <v-app theme="light">
     <v-main>
       <v-container class="fill-height position-relative pa-0" fluid>
 

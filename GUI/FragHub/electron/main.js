@@ -8,16 +8,20 @@ const __dirname = path.dirname(__filename)
 
 function createWindow () {
     const mainWindow = new BrowserWindow({
-        width: 1200,
-        height: 800,
+        width: 1280,
+        height: 720,
+        minWidth: 960,
+        minHeight: 540,
+        backgroundColor: '#ffffff', // <--- AJOUTE CETTE LIGNE ICI
         autoHideMenuBar: true,
         webPreferences: {
-            // On lie le fichier preload qui est resté en .cjs
             preload: path.join(__dirname, 'preload.cjs'),
             nodeIntegration: false,
             contextIsolation: true
         }
     })
+
+    mainWindow.setAspectRatio(16 / 9)
 
     // En développement, Electron charge le serveur local de Nuxt
     mainWindow.loadURL('http://localhost:3000')
