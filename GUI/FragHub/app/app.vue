@@ -67,7 +67,7 @@
 <script setup>
 import { ref, useState } from '#imports'
 
-const activeTab = ref('denovo') // On met 'denovo' par défaut pour tester notre nouveau composant
+const activeTab = ref('input') // On met 'denovo' par défaut pour tester notre nouveau composant
 
 // État global partagé (remplace parameters_dict)
 const parameters = useState('parameters', () => ({
