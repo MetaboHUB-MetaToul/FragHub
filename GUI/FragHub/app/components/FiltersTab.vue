@@ -1,68 +1,64 @@
 <template>
-  <!-- Conteneur principal qui prend 100% de la hauteur et centre son contenu -->
   <v-container fluid class="h-100 d-flex flex-column align-center justify-center pa-4">
 
-    <!-- Carte transparente avec une largeur max pour garder les éléments groupés au centre -->
-    <v-card class="bg-transparent w-100" elevation="0" max-width="950">
-      <v-card-text class="pa-2">
+    <v-card class="bg-transparent w-100" elevation="0">
+      <v-card-text class="pa-0"> <v-row
+          v-for="filter in filters"
+          :key="filter.id"
+          align="center"
+          justify="space-between"
+          class="ma-0 py-1 filter-row"
+      >
 
-        <!-- On itère sur la liste exacte des filtres -->
-        <v-row
-            v-for="filter in filters"
-            :key="filter.id"
-            align="center"
-            class="mb-3 filter-row"
-        >
+        <v-col cols="auto" class="d-flex align-center pa-0">
+          <v-switch
+              v-model="parameters[filter.id]"
+              :true-value="1.0"
+              :false-value="0.0"
+              color="success"
+              hide-details
+              density="compact"
+              inset
+              class="scale-switch flex-shrink-0"
+          ></v-switch>
 
-          <!-- Colonne 1 : Le Switch et le Nom -->
-          <v-col cols="6" class="d-flex align-center">
-            <v-switch
-                v-model="parameters[filter.id]"
-                :true-value="1.0"
-                :false-value="0.0"
-                color="success"
-                hide-details
-                density="compact"
-                inset
-                class="scale-switch flex-shrink-0"
-            ></v-switch>
-            <span class="text-subtitle-1 font-weight-bold ml-3 text-grey-darken-3">
+          <span class="text-subtitle-1 font-weight-bold ml-3 text-grey-darken-3">
               {{ filter.name }}
             </span>
 
-            <!-- Le bouton info avec le texte original en tooltip -->
-            <v-tooltip location="top" max-width="400">
-              <template v-slot:activator="{ props }">
-                <v-btn icon="mdi-information" variant="text" size="small" color="grey" v-bind="props" class="ml-2"></v-btn>
-              </template>
-              <span class="text-body-2">{{ filter.desc }}</span>
-            </v-tooltip>
-          </v-col>
+          <v-tooltip location="top" max-width="400">
+            <template v-slot:activator="{ props }">
+              <v-btn icon="mdi-information" variant="text" size="small" color="grey" v-bind="props" class="ml-2"></v-btn>
+            </template>
+            <span class="text-body-2">{{ filter.desc }}</span>
+          </v-tooltip>
+        </v-col>
 
-          <!-- Colonne 2 : Les paramètres additionnels (alignés à droite) -->
-          <v-col cols="6" class="d-flex align-center justify-end">
-            <div v-if="filter.params" class="d-flex">
-              <div
-                  v-for="(p, index) in filter.params"
-                  :key="p.key"
-                  class="d-flex align-center ml-4"
-              >
-                <span class="text-body-2 font-weight-medium mr-2">{{ p.label }}</span>
-                <v-text-field
-                    v-model.number="parameters[p.key]"
-                    type="number"
-                    variant="outlined"
-                    density="compact"
-                    hide-details
-                    bg-color="white"
-                    style="width: 80px;"
-                    class="param-input text-body-2"
-                ></v-text-field>
-              </div>
+        <v-col cols="auto" class="d-flex align-center pa-0">
+          <div v-if="filter.params" class="d-flex">
+            <div
+                v-for="(p, index) in filter.params"
+                :key="p.key"
+                class="d-flex align-center ml-6"
+            >
+              <span class="text-body-2 font-weight-medium mr-3">{{ p.label }}</span>
+              <v-text-field
+                  :value="parameters[p.key]"
+                  @input="handleInput($event.target.value, p.key)"
+                  type="text"
+                  inputmode="decimal"
+                  variant="outlined"
+                  density="compact"
+                  hide-details
+                  bg-color="white"
+                  style="width: 80px;"
+                  class="param-input text-body-2"
+              ></v-text-field>
             </div>
-          </v-col>
+          </div>
+        </v-col>
 
-        </v-row>
+      </v-row>
 
       </v-card-text>
     </v-card>
@@ -74,7 +70,14 @@ import { useState } from '#imports'
 
 const parameters = useState('parameters')
 
-// La liste EXACTE issue du code Python (tab_filters_5.py) avec les valeurs par défaut
+const handleInput = (val, key) => {
+  // Remplace la virgule par un point
+  const sanitizedValue = val.replace(',', '.');
+  // Met à jour la valeur dans parameters
+  parameters.value[key] = parseFloat(sanitizedValue);
+}
+
+// La liste EXACTE issue du code Python
 const filters = [
   {
     id: 'normalize_intensity',
@@ -124,15 +127,11 @@ const filters = [
   }
 ]
 
-// INITIALISATION SÉCURISÉE DES VALEURS PAR DÉFAUT (Fidèle à PyQt)
 const initDefaults = () => {
   filters.forEach(f => {
-    // 1. On active tous les switchs à 1.0 par défaut
     if (parameters.value[f.id] === undefined) {
       parameters.value[f.id] = 1.0
     }
-
-    // 2. On attribue la valeur par défaut pour chaque paramètre textuel (ex: 3.0, 500.0)
     if (f.params) {
       f.params.forEach(p => {
         if (parameters.value[p.key] === undefined) {
@@ -143,7 +142,6 @@ const initDefaults = () => {
   })
 }
 
-// On lance l'initialisation au chargement du composant
 initDefaults()
 
 </script>
@@ -154,16 +152,13 @@ initDefaults()
   transform-origin: center left;
 }
 
-/* Légère démarcation discrète entre les lignes pour rendre la lecture plus agréable */
 .filter-row {
   border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-  padding-bottom: 8px;
 }
 .filter-row:last-child {
   border-bottom: none;
 }
 
-/* Force les petits champs texte à bien s'afficher */
 .param-input :deep(input) {
   text-align: center;
   padding: 4px;
