@@ -7,7 +7,8 @@
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
-    "postinstall": "nuxt prepare"
+    "postinstall": "nuxt prepare",
+    "electron": "electron electron/main.js"
   },
   "dependencies": {
     "nuxt": "^4.4.6",
@@ -16,6 +17,7 @@
     "vuetify": "^4.0.8"
   },
   "devDependencies": {
+    "electron": "^42.3.0",
     "vuetify-nuxt-module": "^0.19.5"
   }
 }

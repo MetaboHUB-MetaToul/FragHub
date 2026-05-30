@@ -24,7 +24,7 @@
             elevation="3"
             color="grey-lighten-4"
             class="mb-4"
-            @click="$refs.fileInput.click()"
+            @click="browseFiles"
         >
           <v-icon size="50" color="primary">mdi-file-document-multiple-outline</v-icon>
         </v-btn>
@@ -93,29 +93,37 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+// Dans la section <script setup> de InputTab.vue :
+import { computed } from 'vue'
 import { useState } from '#imports'
 
 const parameters = useState('parameters')
-const fileInput = ref(null)
 
 const hasFiles = computed(() => {
   return parameters.value.input_directory && parameters.value.input_directory.length > 0
 })
 
+// fileNames continue d'extraire juste le nom pour l'affichage propre dans la liste
 const fileNames = computed(() => {
   if (!hasFiles.value) return []
-  return parameters.value.input_directory.map(path => path.name || path.split(/[/\\]/).pop())
+  return parameters.value.input_directory.map(path => path.split(/[/\\]/).pop())
 })
 
-const handleFileChange = (event) => {
-  const files = Array.from(event.target.files)
-  if (files.length > 0) {
-    const newNames = files.map(f => f.name)
-    if (!parameters.value.input_directory) parameters.value.input_directory = []
-    parameters.value.input_directory = [...parameters.value.input_directory, ...newNames]
+// === NOUVELLE LOGIQUE ELECTRON ===
+const browseFiles = async () => {
+  // On vérifie qu'on est bien dans Electron
+  if (window.electronAPI) {
+    // Demande au système d'ouvrir la vraie fenêtre de sélection de fichiers
+    const selectedFiles = await window.electronAPI.selectFiles()
+
+    if (selectedFiles && selectedFiles.length > 0) {
+      if (!parameters.value.input_directory) parameters.value.input_directory = []
+      // On ajoute les nouveaux chemins absolus à la liste
+      parameters.value.input_directory = [...parameters.value.input_directory, ...selectedFiles]
+    }
+  } else {
+    console.warn("L'API Electron n'est pas disponible. Lancez l'application via Electron.")
   }
-  event.target.value = ''
 }
 
 const removeFile = (index) => {

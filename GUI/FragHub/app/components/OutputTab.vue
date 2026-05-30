@@ -1,43 +1,41 @@
 <template>
-  <v-container class="h-100 position-relative pa-0">
+  <v-container fluid class="h-100 position-relative d-flex flex-column align-center justify-center pa-4">
 
-    <div class="grid-layout h-100">
+    <div class="d-flex flex-column align-center justify-center">
 
-      <div></div>
+      <input
+          type="file"
+          ref="folderInput"
+          webkitdirectory
+          directory
+          class="d-none"
+          @change="handleFolderChange"
+      />
 
-      <div class="d-flex flex-column align-center justify-center">
-        <v-btn
-            icon
-            width="100"
-            height="100"
-            elevation="3"
-            color="grey-lighten-4"
-            class="mb-4"
-            @click="browseDirectory"
-        >
-          <v-icon size="50" color="primary">mdi-folder-open-outline</v-icon>
-        </v-btn>
-        <div class="text-subtitle-1 font-weight-bold">Select output directory</div>
+      <v-btn
+          icon
+          width="100"
+          height="100"
+          elevation="3"
+          color="grey-lighten-4"
+          class="mb-4"
+          @click="browseFolder"
+      >
+        <v-icon size="50" color="primary">mdi-folder-open-outline</v-icon>
+      </v-btn>
+
+      <div class="text-subtitle-1 font-weight-bold mb-4">Select output directory</div>
+
+      <div
+          v-if="parameters.output_directory"
+          class="text-body-1 text-center text-break px-4 text-primary font-weight-medium"
+          style="max-width: 600px;"
+      >
+        {{ parameters.output_directory }}
       </div>
 
-      <div class="h-100 py-4 pr-4 pl-8 d-flex align-stretch">
-        <v-expand-x-transition>
-
-          <v-card v-if="parameters.output_directory" class="w-100 h-100 d-flex flex-column" elevation="2">
-
-            <v-card-title class="text-subtitle-1 pa-2 bg-grey-lighten-3 flex-shrink-0">
-              Selected Directory
-            </v-card-title>
-            <v-divider class="flex-shrink-0"></v-divider>
-
-            <v-card-text class="pa-4 flex-grow-1 d-flex align-center justify-center overflow-y-auto">
-              <div class="text-body-1 text-center text-break font-weight-medium text-grey-darken-2">
-                {{ parameters.output_directory }}
-              </div>
-            </v-card-text>
-
-          </v-card>
-        </v-expand-x-transition>
+      <div v-else class="text-caption text-grey font-italic">
+        No directory selected
       </div>
 
     </div>
@@ -58,21 +56,21 @@
 </template>
 
 <script setup>
+// Dans la section <script setup> de OutputTab.vue :
 import { useState } from '#imports'
 
 const parameters = useState('parameters')
 
-const browseDirectory = async () => {
-  // Pour tester, on simule un dossier
-  parameters.value.output_directory = "C:\\Users\\Axel\\Data\\FragHub_Output"
+const browseFolder = async () => {
+  if (window.electronAPI) {
+    const selectedFolder = await window.electronAPI.selectFolder()
+
+    if (selectedFolder) {
+      // selectedFolder contiendra le chemin ABSOLU (ex: C:\Users\Axel\...)
+      parameters.value.output_directory = selectedFolder
+    }
+  } else {
+    console.warn("L'API Electron n'est pas disponible.")
+  }
 }
 </script>
-
-<style scoped>
-.grid-layout {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  width: 100%;
-  height: 100%;
-}
-</style>
