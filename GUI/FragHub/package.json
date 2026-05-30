@@ -1,0 +1,21 @@
+{
+  "name": "FragHub",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare"
+  },
+  "dependencies": {
+    "nuxt": "^4.4.6",
+    "vue": "^3.5.34",
+    "vue-router": "^5.0.7",
+    "vuetify": "^4.0.8"
+  },
+  "devDependencies": {
+    "vuetify-nuxt-module": "^0.19.5"
+  }
+}
