@@ -16,10 +16,12 @@
             class="w-100 h-100 d-flex flex-column bg-transparent"
             elevation="0"
         >
-          <div class="tabs-bandeau-wrapper">
+          <div class="tabs-bandeau-wrapper d-flex align-center px-4">
+            <div style="width: 60px;"></div>
+
             <v-tabs
                 v-model="activeTab"
-                class="tabs-bandeau"
+                class="tabs-bandeau flex-grow-1"
                 align-tabs="center"
                 color="primary"
             >
@@ -30,6 +32,15 @@
               <v-tab value="output_settings" class="modern-tab">Output settings</v-tab>
               <v-tab value="projects" class="modern-tab">Projects settings</v-tab>
             </v-tabs>
+
+            <v-switch
+                v-model="isDarkMode"
+                color="primary"
+                hide-details
+                density="compact"
+                class="ml-auto"
+                :prepend-icon="isDarkMode ? 'mdi-weather-night' : 'mdi-white-balance-sunny'"
+            ></v-switch>
           </div>
 
           <v-card-text class="flex-grow-1 overflow-y-auto pa-0 pb-16">
@@ -60,9 +71,11 @@
 </template>
 
 <script setup>
-import { ref, useState } from '#imports'
+import { ref, watch, onMounted } from 'vue'
+import { useState } from '#imports'
 
 const activeTab = ref('input')
+const isDarkMode = ref(false)
 
 const parameters = useState('parameters', () => ({
   input_directory: [],
@@ -71,30 +84,43 @@ const parameters = useState('parameters', () => ({
   de_novo_ppm_tolerance: 10.0,
 }))
 
+// Gestion du mode sombre (Import dynamique pour éviter l'erreur SSR)
+watch(isDarkMode, async (val) => {
+  const DarkReader = await import('darkreader')
+  if (val) {
+    DarkReader.enable({ brightness: 100, contrast: 90, sepia: 10 })
+  } else {
+    DarkReader.disable()
+  }
+})
+
+// Désactiver le mode sombre au chargement
+onMounted(async () => {
+  const DarkReader = await import('darkreader')
+  DarkReader.disable()
+})
+
 const startExecution = async () => {
   console.log("Paramètres envoyés :", parameters.value)
 }
 </script>
 
 <style scoped>
-/* ========================================= */
-/* STYLE DU BANDEAU MODERNE (Opaque)         */
-/* ========================================= */
+/* Style du bandeau */
 .tabs-bandeau-wrapper {
   width: 100%;
-  background: #2b2b2b; /* Gris sombre totalement OPAQUE */
+  background: #2b2b2b;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3); /* Ombre un peu plus prononcée */
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
   z-index: 5;
+  height: 60px;
 }
 
 .tabs-bandeau {
   background: transparent !important;
 }
 
-/* ========================================= */
-/* STYLE DES ONGLETS & SÉPARATEURS           */
-/* ========================================= */
+/* Style des onglets */
 .modern-tab {
   position: relative;
   color: #B0BEC5 !important;
@@ -118,9 +144,7 @@ const startExecution = async () => {
   border-radius: 2px;
 }
 
-/* ========================================= */
-/* LOGO FILIGRANE & BOUTON FLOTTANT          */
-/* ========================================= */
+/* Style Logo & Bouton */
 .background-logo {
   position: absolute;
   top: 50%;
@@ -128,7 +152,7 @@ const startExecution = async () => {
   transform: translate(-50%, -50%);
   z-index: 0;
   pointer-events: none;
-  opacity: 0.25; /* PASSÉ DE 0.08 à 0.25 pour bien le faire ressortir ! */
+  opacity: 0.25;
   width: 100%;
   display: flex;
   justify-content: center;
