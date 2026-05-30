@@ -152,11 +152,9 @@ initDefaults()
   transform-origin: center left;
 }
 
+/* Les lignes ont été supprimées ici pour un look sans séparation */
 .filter-row {
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-}
-.filter-row:last-child {
-  border-bottom: none;
+  margin-bottom: 4px; /* On garde juste un petit espacement pour la lisibilité */
 }
 
 .param-input :deep(input) {

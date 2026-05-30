@@ -41,11 +41,11 @@
     </div>
 
     <div class="position-absolute" style="bottom: 10px; right: 10px;">
-      <v-tooltip location="top">
+      <v-tooltip location="top" max-width="400">
         <template v-slot:activator="{ props }">
-          <v-btn icon="mdi-information-outline" variant="text" v-bind="props" color="grey" size="small"></v-btn>
+          <v-btn icon="mdi-information" variant="text" size="small" color="grey" v-bind="props"></v-btn>
         </template>
-        <span>
+        <span class="text-body-2">
           Create a new empty directory or Select an existing directory <br>
           where FragHub has already written files
         </span>
