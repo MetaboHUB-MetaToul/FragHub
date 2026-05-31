@@ -13,12 +13,10 @@ import scripts.globals_vars as g_vars
 
 loop = None
 
-# --- 1. CORRECTION DU ROUTAGE SOCKET.IO ---
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-# On enveloppe FastAPI DANS SocketIO
 socket_app = socketio.ASGIApp(sio, other_asgi_app=app)
 
 @app.on_event("startup")
@@ -28,7 +26,6 @@ def startup_event():
         loop = asyncio.get_running_loop()
     except RuntimeError:
         loop = asyncio.get_event_loop()
-    print("[OK] Serveur FastAPI et Socket.IO prets !")
 
 class FragHubParams(BaseModel):
     input_directory: list
@@ -59,18 +56,17 @@ class FragHubParams(BaseModel):
 
 def emit_to_frontend(event, data):
     global loop
-    # --- 2. LE MOUCHARD : SANS EMOJIS POUR WINDOWS ---
-    print(f"[EMIT VERS VUE.JS] {event.upper()} : {data}")
-
     if loop:
         try:
             asyncio.run_coroutine_threadsafe(sio.emit(event, data), loop)
         except Exception as e:
+            # On ne prévient la console qu'en cas de coupure de communication
             print(f"[WARNING] Erreur de communication Socket: {e}")
 
 # --- CALLBACKS BOUCLIERS ---
 def progress_callback(*args):
-    if args: emit_to_frontend('progress', args[0])
+    if args:
+        emit_to_frontend('progress', args[0])
 def total_items_callback(*args):
     if args: emit_to_frontend('total_items', args[0])
 def prefix_callback(*args):
@@ -99,9 +95,8 @@ async def init_data():
     g_vars.load_internal_databases()
     return {"status": "loaded"}
 
-# --- 3. LE BOUCLIER ANTI-CRASH SILENCIEUX ---
+# --- LE BOUCLIER ANTI-CRASH SILENCIEUX ---
 def execute_main_safely():
-    print("\n[START] Lancement de MAIN.py en tache de fond...")
     try:
         MAIN(
             progress_callback=progress_callback,
@@ -114,8 +109,9 @@ def execute_main_safely():
             stop_flag=get_stop_flag
         )
     except Exception as e:
+        # Seule erreur qui mérite de polluer la console pour le debug !
         print(f"\n[ERROR] ERREUR CRITIQUE DANS MAIN.PY :")
-        traceback.print_exc() # Imprime l'erreur exacte dans ta console !
+        traceback.print_exc()
         emit_to_frontend('deletion', f"CRASH: {str(e)}")
         emit_to_frontend('completion', "PROCESS FAILED (Check console)")
 

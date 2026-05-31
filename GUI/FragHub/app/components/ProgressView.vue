@@ -1,15 +1,17 @@
 <template>
-  <v-container class="h-100 d-flex flex-column pa-4" fluid>
-    <div class="text-center mb-4">
+  <v-container class="h-100 d-flex flex-column pa-4 overflow-hidden" fluid>
+
+    <div class="text-center mb-4 flex-shrink-0">
       <v-img src="~/assets/FragHub_icon.png" max-width="100" class="mx-auto"></v-img>
     </div>
 
-    <div class="d-flex flex-column flex-grow-1" style="gap: 16px;">
+    <div class="d-flex flex-column flex-grow-1 overflow-hidden" style="gap: 16px;">
 
-      <v-card class="flex-grow-1 d-flex flex-column border" elevation="2" style="min-height: 250px;">
-        <v-tabs v-model="tabReport" bg-color="grey-lighten-3" density="compact">
+      <v-card class="flex-grow-1 d-flex flex-column border overflow-hidden" elevation="2">
+        <v-tabs v-model="tabReport" bg-color="grey-lighten-3" density="compact" class="flex-shrink-0">
           <v-tab value="report">Report</v-tab>
         </v-tabs>
+
         <v-card-text class="flex-grow-1 overflow-y-auto pa-2 bg-white" ref="reportContainer">
           <div v-for="(log, i) in logs" :key="i" class="mb-1">
 
@@ -44,14 +46,17 @@
         <v-card-text class="pa-4 bg-white">
           <div v-if="!isFinished">
             <div class="text-subtitle-1 font-weight-medium mb-1">{{ currentPrefix }}</div>
+
             <v-progress-linear
                 v-model="progressPercent"
                 height="24"
                 color="blue-darken-1"
                 rounded
                 class="mb-2"
+                :class="{ 'instant-reset': progressPercent === 0 }"
                 style="border: 1px solid #ccc;"
             ></v-progress-linear>
+
             <div class="text-right text-subtitle-2 text-grey-darken-2">
               {{ suffixText }}
             </div>
@@ -64,7 +69,7 @@
 
     </div>
 
-    <div class="d-flex justify-center mt-6">
+    <div class="d-flex justify-center mt-6 flex-shrink-0">
       <v-btn
           v-if="!isFinished"
           color="error"
@@ -114,7 +119,6 @@ const finalMessage = ref('')
 let hasReportedCurrentTask = false
 let timerInterval = null;
 
-// --- CALCULS DU PROGRESS BAR ---
 const progressPercent = computed(() => {
   if (totalItems.value <= 0) return 0;
   return (progressValue.value / totalItems.value) * 100;
@@ -138,7 +142,6 @@ const formatTime = (seconds) => {
   return `${h}:${m}:${s}`
 }
 
-// Le format texte EXACT de ton ancien PyQt6
 const suffixText = computed(() => {
   const pct = progressPercent.value.toFixed(2)
   const prog = progressValue.value
@@ -150,7 +153,6 @@ const suffixText = computed(() => {
   return `${pct}% | ${prog}/${tot} ${it} [${formatTime(elapsed)} < ${formatTime(eta)}, ${speed} ${it}/s]`
 })
 
-// Auto-Scroll vers le bas
 const scrollToBottom = async () => {
   await nextTick()
   if (reportContainer.value) {
@@ -159,7 +161,6 @@ const scrollToBottom = async () => {
   }
 }
 
-// --- LOGIQUE MAGIQUE DE PYQT : LA FAUSSE BARRE À 100% ---
 watch(progressValue, (newVal) => {
   if (newVal >= totalItems.value && totalItems.value > 0 && !hasReportedCurrentTask) {
     logs.value.push({
@@ -172,14 +173,12 @@ watch(progressValue, (newVal) => {
   }
 })
 
-// --- ÉCOUTE DES SOCKETS ---
 onMounted(() => {
   startTime.value = Date.now()
 
-  // Force le timer à se rafraîchir chaque seconde pour les calculs d'ETA
   timerInterval = setInterval(() => {
     if (!isFinished.value && progressValue.value < totalItems.value) {
-      progressValue.value = progressValue.value // Déclenche la réactivité
+      progressValue.value = progressValue.value
     }
   }, 1000);
 
@@ -189,7 +188,7 @@ onMounted(() => {
     totalItems.value = val
     startTime.value = Date.now()
     progressValue.value = 0
-    hasReportedCurrentTask = false // Réinitialise pour la prochaine barre
+    hasReportedCurrentTask = false
   })
 
   socket.on('prefix', (val) => { currentPrefix.value = val })
@@ -216,7 +215,6 @@ onMounted(() => {
 
 const stopProcess = async () => {
   isStopping.value = true
-  // Envoie une requête au serveur pour activer le stop_flag de MAIN.py
   await fetch('http://127.0.0.1:8000/stop-analysis')
 }
 
@@ -232,4 +230,12 @@ onUnmounted(() => {
 
 <style scoped>
 .border { border: 1px solid #e0e0e0; }
+
+/* Magie Noire CSS (Deep Selector) :
+  On rentre dans le composant interne de Vuetify pour désactiver
+  l'animation de la barre UNIQUEMENT quand la classe instant-reset est active.
+*/
+.instant-reset :deep(.v-progress-linear__determinate) {
+  transition: none !important;
+}
 </style>
