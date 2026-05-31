@@ -168,8 +168,12 @@ app.whenReady().then(() => {
         const decodedPath = decodeURIComponent(urlPath);
         const finalPath = decodedPath || 'index.html';
 
+        // 👇 LA CORRECTION EST ICI 👇
+        // En prod, la racine est app.getAppPath(). En dev, la racine est le dossier parent de main.js (..)
+        const basePath = app.isPackaged ? app.getAppPath() : path.join(__dirname, '..');
+
         // Va chercher le fichier localement dans le dossier généré
-        const filePath = path.join(app.getAppPath(), '.output', 'public', finalPath);
+        const filePath = path.join(basePath, '.output', 'public', finalPath);
         return net.fetch(pathToFileURL(filePath).href);
     });
 
