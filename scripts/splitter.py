@@ -67,8 +67,6 @@ def split_LC_GC(POS, NEG, progress_callback=None, total_items_callback=None, pre
     if total_items_callback:
         total_items_callback(total_rows, 0)  # Report total and initialize completed items to 0
 
-    # --- MODIFICATION START ---
-
     # Initialize empty DataFrames with the same columns as the inputs.
     # This ensures they have the correct structure from the start.
     POS_LC = pd.DataFrame()
@@ -101,8 +99,6 @@ def split_LC_GC(POS, NEG, progress_callback=None, total_items_callback=None, pre
     # Indicate that all rows have been processed
     if progress_callback:
         progress_callback(total_rows)
-
-    # --- MODIFICATION END ---
 
     # Returning separated DataFrames
     return POS_LC, POS_GC, NEG_LC, NEG_GC
@@ -160,9 +156,6 @@ def exp_in_silico_splitter(POS_LC, POS_GC, NEG_LC, NEG_GC, progress_callback=Non
         negative LC in silico, negative GC in silico, positive LC experimental, positive GC experimental,
         negative LC experimental, and negative GC experimental.
     """
-
-    # --- MODIFICATION START ---
-
     # Initialize all output DataFrames as empty with the correct column structure
     # from their respective source DataFrames.
     POS_LC_In_Silico_temp = pd.DataFrame()
@@ -214,8 +207,6 @@ def exp_in_silico_splitter(POS_LC, POS_GC, NEG_LC, NEG_GC, progress_callback=Non
         NEG_GC_temp = split_in_silico_exp(NEG_GC, "false", "NEG_GC_Exp", progress_callback=progress_callback,
                                           total_items_callback=total_items_callback, prefix_callback=prefix_callback,
                                           item_type_callback=item_type_callback)
-
-    # --- MODIFICATION END ---
 
     # Return a tuple of all newly created dataframes.
     return POS_LC_temp, POS_LC_In_Silico_temp, POS_GC_temp, POS_GC_In_Silico_temp, NEG_LC_temp, NEG_LC_In_Silico_temp, NEG_GC_temp, NEG_GC_In_Silico_temp

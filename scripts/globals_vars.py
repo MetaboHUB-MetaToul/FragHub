@@ -113,76 +113,77 @@ empty_pattern = re.compile(r"(^CCS:( .*)?)|(^\$:00in-source( .*)?)|(^0( .*)?)|(^
 
 # =================================================== READ FILES =======================================================
 
-global ontologies_df
-files = [f for f in os.listdir(ONTOLOGIES_PATH) if 'ontologies_dict' in f]
-ontologies_df = pd.concat(
-    (pd.read_csv(os.path.join(ONTOLOGIES_PATH, f), sep=";", encoding="UTF-8") for f in files),
-    ignore_index=True
-)
+# 1. On déclare les variables globales à vide pour que l'importation soit instantanée
+global ontologies_df, pubchem_datas, adduct_massdiff_dict_POS, adduct_massdiff_dict_NEG
+global adduct_dict_POS, adduct_dict_NEG, instrument_tree, keys_dict
 
-# Clean up memory
-del files
+ontologies_df = None
+pubchem_datas = None
+adduct_massdiff_dict_POS = {}
+adduct_massdiff_dict_NEG = {}
+adduct_dict_POS = {}
+adduct_dict_NEG = {}
+instrument_tree = {}
+keys_dict = {}
 
+# 2. On enferme TOUT le chargement dans cette fonction
+def load_internal_databases(step_callback=None):
+    global ontologies_df, pubchem_datas, adduct_massdiff_dict_POS, adduct_massdiff_dict_NEG
+    global adduct_dict_POS, adduct_dict_NEG, instrument_tree, keys_dict
 
-# ================
+    # Sécurité : si c'est déjà chargé, on ne refait pas le travail
+    if pubchem_datas is not None:
+        return
 
-# Folder containing the CSV files
-folder_path = PUBCHEM_PATH
-# List to store each DataFrame
-all_dfs = []
-# Function to read a CSV file
-def read_csv(file_path):
-    return pd.read_csv(file_path, sep=';', quotechar='"', encoding='utf-8')
+    if step_callback:
+        step_callback("-- LOADING INTERNAL DATABASES (PUBCHEM, ONTOLOGIES...) --")
 
-# Use ThreadPoolExecutor to read files in parallel
-with ThreadPoolExecutor() as executor:
-    futures = []
-    for file_name in os.listdir(folder_path):
-        if file_name.endswith('.csv'):
-            file_path = os.path.join(folder_path, file_name)
-            futures.append(executor.submit(read_csv, file_path))
-    # Retrieve the results from the futures
-    for future in futures:
-        all_dfs.append(future.result())
+    # --- ONTOLOGIES ---
+    files = [f for f in os.listdir(ONTOLOGIES_PATH) if 'ontologies_dict' in f]
+    ontologies_df = pd.concat(
+        (pd.read_csv(os.path.join(ONTOLOGIES_PATH, f), sep=";", encoding="UTF-8") for f in files),
+        ignore_index=True
+    )
 
-# Concatenate all DataFrames
-global pubchem_datas
-pubchem_datas = pd.concat(all_dfs, ignore_index=True)
-del all_dfs
+    # --- PUBCHEM (MULTITHREADING CONSERVÉ) ---
+    folder_path = PUBCHEM_PATH
+    all_dfs = []
 
-# ================
+    def read_csv(file_path):
+        return pd.read_csv(file_path, sep=';', quotechar='"', encoding='utf-8')
 
-global adduct_massdiff_dict_POS, adduct_massdiff_dict_NEG, adduct_dict_POS, adduct_dict_NEG
-adduct_dataframe = pd.read_csv(os.path.abspath(os.path.join(ADDUCT_PATH, "adduct_to_convert.csv")), sep=";", encoding="UTF-8")
+    with ThreadPoolExecutor() as executor:
+        futures = []
+        for file_name in os.listdir(folder_path):
+            if file_name.endswith('.csv'):
+                file_path = os.path.join(folder_path, file_name)
+                futures.append(executor.submit(read_csv, file_path))
+        for future in futures:
+            all_dfs.append(future.result())
 
-# Filtering ion modes (positive and negative)
-adduct_dataframe_POS = adduct_dataframe[adduct_dataframe['ionmode'] == "positive"]
-adduct_dataframe_NEG = adduct_dataframe[adduct_dataframe['ionmode'] == "negative"]
+    pubchem_datas = pd.concat(all_dfs, ignore_index=True)
+    del all_dfs
 
-# Creating dictionaries for "positive"
-adduct_dict_POS = dict(zip(adduct_dataframe_POS['known_adduct'], adduct_dataframe_POS['fraghub_default']))
-adduct_massdiff_dict_POS = dict(zip(adduct_dataframe_POS['fraghub_default'], adduct_dataframe_POS['massdiff']))
-del adduct_dataframe_POS
+    # --- ADDUCTS ---
+    adduct_dataframe = pd.read_csv(os.path.abspath(os.path.join(ADDUCT_PATH, "adduct_to_convert.csv")), sep=";", encoding="UTF-8")
+    adduct_dataframe_POS = adduct_dataframe[adduct_dataframe['ionmode'] == "positive"]
+    adduct_dataframe_NEG = adduct_dataframe[adduct_dataframe['ionmode'] == "negative"]
 
-# Creating dictionaries for "negative"
-adduct_dict_NEG = dict(zip(adduct_dataframe_NEG['known_adduct'], adduct_dataframe_NEG['fraghub_default']))
-adduct_massdiff_dict_NEG = dict(zip(adduct_dataframe_NEG['fraghub_default'], adduct_dataframe_NEG['massdiff']))
-del adduct_dataframe_NEG
+    adduct_dict_POS = dict(zip(adduct_dataframe_POS['known_adduct'], adduct_dataframe_POS['fraghub_default']))
+    adduct_massdiff_dict_POS = dict(zip(adduct_dataframe_POS['fraghub_default'], adduct_dataframe_POS['massdiff']))
 
-del adduct_dataframe
+    adduct_dict_NEG = dict(zip(adduct_dataframe_NEG['known_adduct'], adduct_dataframe_NEG['fraghub_default']))
+    adduct_massdiff_dict_NEG = dict(zip(adduct_dataframe_NEG['fraghub_default'], adduct_dataframe_NEG['massdiff']))
+    del adduct_dataframe
 
-# ================
+    # --- INSTRUMENT TREE ---
+    with open(os.path.join(INSTRUMENT_TREE_PATH,'instruments_tree.json'), 'r') as f:
+        instrument_tree = json.load(f)
 
-global instrument_tree
-with open(os.path.join(INSTRUMENT_TREE_PATH,'instruments_tree.json'), 'r') as f:
-    instrument_tree = json.load(f)
-
-# ================
-
-global keys_dict
-Key_dataframe = pd.read_csv(os.path.abspath(os.path.join(KEYS_PATH,"key_to_convert.csv")),sep=";", encoding="UTF-8") # Remplacez 'your_file.csv' par le chemin de votre fichier
-keys_dict = dict(zip(Key_dataframe['known_synonym'], Key_dataframe['fraghub_default'].str.upper()))
-del Key_dataframe
+    # --- KEYS ---
+    Key_dataframe = pd.read_csv(os.path.abspath(os.path.join(KEYS_PATH,"key_to_convert.csv")),sep=";", encoding="UTF-8")
+    keys_dict = dict(zip(Key_dataframe['known_synonym'], Key_dataframe['fraghub_default'].str.upper()))
+    del Key_dataframe
 
 # ======================================================================================================================
 

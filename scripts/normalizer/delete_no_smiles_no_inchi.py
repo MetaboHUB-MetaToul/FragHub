@@ -1,27 +1,27 @@
 import scripts.deletion_report
 
+
 def delete_no_smiles_no_inchi_no_inchikey(metadata_dict):
     """
-    This function deletes entries from the provided `metadata_dict` dictionary
-    if both 'SMILES' and 'INCHI' keys are not present in it (i.e., have NaN values).
+    Deletes a spectrum if the metadata lacks all three essential chemical identifiers:
+    SMILES, InChI, and InChIKey.
 
-    :param metadata_dict: A dictionary containing metadata about chemical compounds. It usually
-                          contains keys such as 'SMILES', 'INCHI', etc. Sometimes these keys
-                          may have NaN values indicating their absence.
+    The function checks if the values for 'SMILES', 'INCHI', and 'INCHIKEY' are
+    all non-existent (evaluated as False, typically meaning None or NaN).
+
+    :param metadata_dict: A dictionary containing chemical metadata.
     :type metadata_dict: dict
-
-    :return: If both 'SMILES' and 'INCHI' keys in the input dictionary have NaN values, None is returned.
-             Otherwise, the original dictionary is returned, i.e., no entries are deleted.
+    :return: The original metadata dictionary if at least one identifier is present,
+             or None if all three are missing.
     :rtype: dict or None
     """
-    # Check if both 'SMILES' and 'INCHI' keys in the dictionary do not exist (have NaN values).
+    # Check if all three identifiers (SMILES, INCHI, INCHIKEY) evaluate to False (e.g., empty string, None, or NaN).
     if not metadata_dict["SMILES"] and not metadata_dict["INCHI"] and not metadata_dict["INCHIKEY"]:
-        # If both keys do not exist, return None. This effectively deletes the entries from a
-        # higher-level context as the returned None may not be added back to a collection of metadata dictionaries.
+        # If all identifiers are missing, record the deletion reason and update the report counter.
         metadata_dict['DELETION_REASON'] = "spectrum deleted because it has neither inchi nor smiles nor inchikey"
         scripts.deletion_report.deleted_spectrum_list.append(metadata_dict)
         scripts.deletion_report.no_smiles_no_inchi_no_inchikey += 1
         return None
     else:
-        # If either 'SMILES' or 'INCHI' key exists (the values are not NaN), return the original dictionary.
+        # If at least one identifier is present, the spectrum is kept.
         return metadata_dict

@@ -1,128 +1,175 @@
+import asyncio
+import socketio
+import uvicorn
+import multiprocessing
+import traceback
+import time
+from fastapi import FastAPI, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
+
+from scripts.MAIN import MAIN
+from scripts.backend_vars import parameters_dict
+import scripts.globals_vars as g_vars
+
 import sys
 import os
-import ctypes
-import time
-import platform
-import traceback
 
-from PyQt6.QtWidgets import QApplication, QMessageBox
-from PyQt6.QtGui import QPixmap, QIcon
-from PyQt6.QtCore import pyqtSignal, QObject, QThread
+# Redirection forcée de la sortie standard et d'erreur vers un fichier
+log_path = os.path.join(os.path.expanduser("~"), "fraghub_debug.txt")
+sys.stdout = open(log_path, 'w')
+sys.stderr = sys.stdout
 
-# Logique de démarrage et gestion des erreurs depuis leur nouvel emplacement
-from scripts.GUI.error_handler import exception_hook
-from scripts.GUI.splash_screen import LoadingSplashScreen
-# Import de la fenêtre principale depuis son nouvel emplacement
-from scripts.GUI.main_GUI import MainWindow
+print(f"--- Démarrage de FragHub ---")
+print(f"CWD: {os.getcwd()}")
+print(f"sys.argv: {sys.argv}")
 
-if getattr(sys, 'frozen', False):
-    BASE_DIR = sys._MEIPASS
-else:
-    BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+# Variables globales
+loop = None
+last_emit_time = 0
+EMIT_THROTTLE = 0.05  # 20ms pour une fluidité maximale
 
-if platform.system() == "Windows":
-    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("FragHub")
+# Configuration Socket.IO et FastAPI
+sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
+app = FastAPI()
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
+socket_app = socketio.ASGIApp(sio, other_asgi_app=app)
 
-class StartupWorker(QObject):
-    finished = pyqtSignal(object)
-    error = pyqtSignal(str)
-    update_splash_message = pyqtSignal(str, int)
+@app.on_event("startup")
+def startup_event():
+    global loop
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.get_event_loop()
 
-    def __init__(self, base_dir):
-        super().__init__()
-        self._base_dir = base_dir
+class FragHubParams(BaseModel):
+    input_directory: list
+    output_directory: str
+    normalize_intensity: float
+    remove_peak_above_precursormz: float
+    check_minimum_peak_requiered: float
+    check_minimum_peak_requiered_n_peaks: float
+    reduce_peak_list: float
+    reduce_peak_list_max_peaks: float
+    remove_spectrum_under_entropy_score: float
+    remove_spectrum_under_entropy_score_value: float
+    keep_mz_in_range: float
+    keep_mz_in_range_from_mz: float
+    keep_mz_in_range_to_mz: float
+    check_minimum_of_high_peaks_requiered: float
+    check_minimum_of_high_peaks_requiered_intensity_percent: float
+    check_minimum_of_high_peaks_requiered_no_peaks: float
+    calculate_de_novo: float
+    de_novo_ppm_tolerance: float
+    csv: float
+    msp: float
+    json_enabled: float = Field(alias='json')
+    reset_updates: float
 
-    def run_startup_tasks(self):
-        try:
-            self.update_splash_message.emit("Loading FragHub, please wait...", 20)
-            time.sleep(1)
-            # L'import de MAIN reste correct car on part de la racine
-            from scripts.MAIN import MAIN as imported_main
-            self.update_splash_message.emit("Initializing main window", 20)
-            time.sleep(1)
-            self.finished.emit(imported_main)
-        except ImportError as e:
-            self.error.emit(f"Failed to import 'scripts.MAIN': {e}\n{traceback.format_exc()}")
-        except Exception as e:
-            self.error.emit(f"Unexpected error during startup tasks: {e}\n{traceback.format_exc()}")
+    class Config:
+        populate_by_name = True
 
+def emit_to_frontend(event, data):
+    global loop, last_emit_time
 
-def run_GUI():
-    # Ajoute le dossier 'scripts' au path pour assurer que les imports relatifs fonctionnent
-    scripts_path = os.path.join(BASE_DIR, 'scripts')
-    if scripts_path not in sys.path:
-        sys.path.insert(0, scripts_path)
-
-    sys.excepthook = exception_hook
-    app = QApplication(sys.argv if hasattr(sys, 'argv') else [''])
-
-    # CORRECTION: Chemin des icônes mis à jour
-    scripts_gui_assets = os.path.join(BASE_DIR, "GUI", "assets")
-    if platform.system() == "Darwin":
-        app_icon_path = os.path.join(BASE_DIR, scripts_gui_assets, "FragHub_Python_icon.icns")
-    else:
-        app_icon_path = os.path.join(BASE_DIR, scripts_gui_assets, "FragHub_Python_icon.ico")
-    if not os.path.exists(app_icon_path):
-        app_icon_path = os.path.join(BASE_DIR, scripts_gui_assets, "FragHub_icon.png")
-    if os.path.exists(app_icon_path):
-        app.setWindowIcon(QIcon(app_icon_path))
-
-    # CORRECTION: Chemin du splash screen mis à jour
-    splash_pix_path = os.path.join(BASE_DIR, scripts_gui_assets, "FragHub_icon.png")
-    splash_pixmap = QPixmap(splash_pix_path)
-    splash = LoadingSplashScreen(splash_pixmap)
-    splash.showMessage("Loading FragHub...")
-    splash.show()
-
-    startup_thread = QThread()
-    startup_worker = StartupWorker(BASE_DIR)
-    startup_worker.moveToThread(startup_thread)
-
-    shared_state = {'main_window': None, 'main_function': None, 'splash_screen': splash}
-
-    def on_startup_complete(imported_main_function):
-        if not QApplication.instance():
+    # Throttling UNIQUEMENT sur progress — tous les autres événements
+    # (total_items, prefix, step, completion, deletion…) passent toujours.
+    # Throttler total_items causait des resets perdus → barre qui saute à 100%.
+    if event == 'progress':
+        current_time = time.time()
+        if (current_time - last_emit_time) < EMIT_THROTTLE:
             return
-        shared_state['main_function'] = imported_main_function
+        last_emit_time = current_time
+
+    if loop:
         try:
-            shared_state['main_window'] = MainWindow(main_function_ref=shared_state['main_function'])
-            shared_state['main_window'].show()
-        except Exception as e:
-            on_startup_error(f"Failed to create main window: {e}\n{traceback.format_exc()}")
-            return
+            asyncio.run_coroutine_threadsafe(sio.emit(event, data), loop)
+        except Exception:
+            pass
 
-        if shared_state['splash_screen']:
-            shared_state['splash_screen'].close()
-            shared_state['splash_screen'] = None
+# --- CALLBACKS ---
+current_total_items = 0  # <-- Nouvelle variable globale
 
-    def on_startup_error(error_message):
-        if shared_state['splash_screen']:
-            shared_state['splash_screen'].close()
-            shared_state['splash_screen'] = None
-        QMessageBox.critical(None, "Fatal Startup Error", f"Could not start FragHub:\n{error_message}")
-        if QApplication.instance():
-            QApplication.instance().quit()
+def progress_callback(*args):
+    global last_emit_time, current_total_items
+    if args:
+        # Si on atteint 100%, on remet le chrono à zéro pour FORCER l'envoi
+        if args[0] >= current_total_items:
+            last_emit_time = 0
 
-    def update_splash(message, font_size=12):
-        if shared_state['splash_screen']:
-            shared_state['splash_screen'].showMessage(message, font_size=font_size)
+        emit_to_frontend('progress', args[0])
 
-    startup_thread.started.connect(startup_worker.run_startup_tasks)
-    startup_worker.finished.connect(on_startup_complete)
-    startup_worker.error.connect(on_startup_error)
-    startup_worker.update_splash_message.connect(update_splash)
+def total_items_callback(*args):
+    global last_emit_time, current_total_items
+    last_emit_time = 0
+    if args:
+        current_total_items = args[0]  # <-- On enregistre le maximum
+        emit_to_frontend('total_items', args[0])
 
-    startup_worker.finished.connect(startup_thread.quit)
-    startup_worker.error.connect(startup_thread.quit)
-    startup_worker.finished.connect(startup_worker.deleteLater)
-    startup_worker.error.connect(startup_worker.deleteLater)
-    startup_thread.finished.connect(startup_thread.deleteLater)
+def prefix_callback(*args):
+    global last_emit_time
+    last_emit_time = 0
+    if args: emit_to_frontend('prefix', args[0])
 
-    startup_thread.start()
-    exit_code = app.exec()
-    sys.exit(exit_code)
+def item_type_callback(*args):
+    if args: emit_to_frontend('item_type', args[0])
 
+def step_callback(*args):
+    if args: emit_to_frontend('step', args[0])
+
+def completion_callback(*args):
+    if args: emit_to_frontend('completion', args[0])
+
+def deletion_callback(*args):
+    if args: emit_to_frontend('deletion', args[0])
+
+# --- GESTION DU STOP ---
+global_stop_flag = False
+def get_stop_flag(): return global_stop_flag
+
+@app.get("/stop-analysis")
+async def stop_analysis():
+    global global_stop_flag
+    global_stop_flag = True
+    return {"status": "stopped"}
+
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
+
+@app.get("/init-data")
+async def init_data():
+    g_vars.load_internal_databases()
+    return {"status": "loaded"}
+
+# --- EXÉCUTION ---
+def execute_main_safely():
+    try:
+        MAIN(
+            progress_callback=progress_callback,
+            total_items_callback=total_items_callback,
+            prefix_callback=prefix_callback,
+            item_type_callback=item_type_callback,
+            step_callback=step_callback,
+            completion_callback=completion_callback,
+            deletion_callback=deletion_callback,
+            stop_flag=get_stop_flag
+        )
+    except Exception:
+        traceback.print_exc()
+
+@app.post("/run-analysis")
+async def run_analysis(params: FragHubParams, background_tasks: BackgroundTasks):
+    global global_stop_flag
+    global_stop_flag = False
+    params_data = params.model_dump(by_alias=True)
+    for key, value in params_data.items():
+        parameters_dict[key] = value
+    background_tasks.add_task(execute_main_safely)
+    return {"status": "started"}
 
 if __name__ == "__main__":
-    run_GUI()
+    multiprocessing.freeze_support()
+    uvicorn.run(socket_app, host="127.0.0.1", port=8000)

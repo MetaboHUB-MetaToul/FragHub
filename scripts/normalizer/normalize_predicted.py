@@ -4,60 +4,57 @@ import re
 
 def in_filename_or_name(filename, name):
     """
-    Check whether a given filename or name matches specific criteria.
+    Checks if the combined filename and spectrum name indicate an in-silico prediction,
+    while explicitly excluding data from the "MSMS_Public" source.
 
-    This function checks if the string "MSMS_Public" is not in the filename
-    and simultaneously if the filename combined with the name matches the
-    In_Silico_pattern regular expression. If both conditions are met, the function
-    returns True, otherwise, it returns False.
-
-    Args:
-        filename (str): The filename to be checked.
-        name (str): The name to be checked alongside the filename.
-
-    Returns:
-        bool: True if conditions are met, False otherwise.
+    :param filename: The source file name.
+    :type filename: str
+    :param name: The spectrum name.
+    :type name: str
+    :return: True if the conditions for in-silico prediction are met and the file is not "MSMS_Public", False otherwise.
+    :rtype: bool
     """
-    # Check if the string "MSMS_Public" is not in the filename
+    # Exclude files containing "MSMS_Public" from being classified via this check.
     if "MSMS_Public" not in filename:
-        # If "MSMS_Public" is not in the filename, check if it matches the In_Silico_pattern
-        if re.search(scripts.globals_vars.In_Silico_pattern, filename+" "+name):
-            # If both conditions are met, return True
+        # Check if the concatenation of filename and name matches the global In_Silico_pattern.
+        if re.search(scripts.globals_vars.In_Silico_pattern, filename + " " + name):
             return True
-    # If either of the conditions is not met, return False
     return False
 
 
 def normalize_predicted(metadata_dict):
     """
-    Update the 'PREDICTED' field in the metadata dictionary based on specific conditions.
+    Standardizes the 'PREDICTED' field to 'true' or 'false' based on multiple metadata fields.
 
-    The function checks if certain conditions are met within the metadata dictionary
-    and updates the 'PREDICTED' field accordingly. The 'COMMENT' field is evaluated
-    against a pattern, the 'PREDICTED' field is checked for a string "true", and the
-    'FILENAME' field is checked for specific substrings.
+    The spectrum is classified as 'predicted' (in-silico) if any of the following are true:
+    1. The 'COMMENT' field matches the global in-silico pattern.
+    2. The original 'PREDICTED' field is already set to 'true'.
+    3. The `in_filename_or_name` check returns True.
 
-    Parameters:
-        metadata_dict (dict): A dictionary containing metadata with keys "COMMENT",
-                              "PREDICTED", "FILENAME", and "NAME".
+    If the original 'PREDICTED' field is 'false', it is left unchanged by this function.
 
-    Returns:
-        dict: The updated metadata dictionary with the 'PREDICTED' field set to 'true'
-              or 'false' based on the evaluated conditions.
+    :param metadata_dict: A dictionary containing spectrum metadata, including
+                          "COMMENT", "PREDICTED", "FILENAME", and "NAME".
+    :type metadata_dict: dict
+    :return: The updated metadata dictionary with the standardized 'PREDICTED' field.
+    :rtype: dict
     """
-    comment_field = metadata_dict["COMMENT"]  # Extract the 'COMMENT' field from the metadata dictionary
-    predicted = metadata_dict["PREDICTED"]  # Extract the 'PREDICTED' field from the metadata dictionary
-    filename = metadata_dict["FILENAME"]  # Extract the 'FILENAME' from the metadata dictionary
-    name = metadata_dict["NAME"]  # Extract the 'NAME' from the metadata dictionary
+    comment_field = metadata_dict["COMMENT"]
+    predicted = metadata_dict["PREDICTED"]
+    filename = metadata_dict["FILENAME"]
+    name = metadata_dict["NAME"]
 
-    # If 'COMMENT' field matches the pattern, or 'PREDICTED' is 'true', or 'MSMS_Public' in the filename:
-    #    set 'PREDICTED' field in the metadata dictionary to 'true'
+    # Only attempt to classify as 'true' if the field is not already 'false'.
     if predicted == 'false':
         return metadata_dict
 
-    if re.search(scripts.globals_vars.In_Silico_pattern, comment_field) or predicted == "true" or in_filename_or_name(filename, name):
+    # Check the conditions to classify the spectrum as predicted ('true').
+    if (re.search(scripts.globals_vars.In_Silico_pattern, comment_field) or
+            predicted == "true" or
+            in_filename_or_name(filename, name)):
         metadata_dict["PREDICTED"] = "true"
-    else:  # Otherwise, set the 'PREDICTED' field in the metadata dictionary to 'false'
+    else:
+        # If the original field was not 'false' but none of the 'true' conditions were met.
         metadata_dict["PREDICTED"] = "false"
 
-    return metadata_dict  # Return the updated metadata dictionary
+    return metadata_dict

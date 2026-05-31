@@ -1,8 +1,8 @@
 <div align="center">
-  <img src="scripts/GUI/assets/FragHub_icon.png" alt="FragHub Icon" /> 1.4.1
+  <img src="scripts/GUI/assets/FragHub_icon.png" alt="FragHub Icon" /> 1.5.0
 </div>
 
-# FragHub  (1.4.1)
+# FragHub  (1.5.0)
 ![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)
 ![Required_Python](https://img.shields.io/badge/Python-3.12-blue)
 ![License: CeCILL](https://img.shields.io/badge/License-CeCILL-yellow.svg)
@@ -34,9 +34,9 @@ Key features:<br>
 
 ## INSTALLATION
 1) Download FragHub executable corresponding to your OS HERE:<br>
-   **Windows** x64: [Download Windows x64 Installer](https://zenodo.org/records/17235741/files/FragHub_1.4.1_setup_windows_x64.exe?download=1)<br>
-   **Linux** x64: [Download Linux x64 Installer](https://zenodo.org/records/17235741/files/FragHub_1.4.1_setup_Linux_x64?download=1)<br>
-   **macOS** arm64: [Download macOS arm64 app](https://zenodo.org/records/17235741/files/FragHub_macOS_1.4.1_arm64.dmg?download=1)<br>
+   **Windows** x64: [Download Windows x64 Installer](https://zenodo.org/records/17235741/files/FragHub_1.5.0_setup_windows_x64.exe?download=1)<br>
+   **Linux** x64: [Download Linux x64 Installer](https://zenodo.org/records/17235741/files/FragHub_1.5.0_setup_Linux_x64?download=1)<br>
+   **macOS** arm64: [Download macOS arm64 app](https://zenodo.org/records/17235741/files/FragHub_macOS_1.5.0_arm64.dmg?download=1)<br>
 2) Execute setup installer (macOS: drag to App)
 3) select installation folder
 4) click install
@@ -54,7 +54,7 @@ To use this programme:
    1) First tab: Select single or multiple .json, .csv, .msp, or .mgf files.<br>![img.png](img.png)
    2) Second tab: Create a new empty directory or Select an existing directory where FragHub has already written files<br>![img_1.png](img_1.png)
    3) Third tab: This area allows users to select specific filters for inclusion during the processing stage. Moreover, it provides the option to adjust the respective parameters of each filters.<br>![img_2.png](img_2.png)
-   4) Fourth tab: This area allows the user to choose whether or not to perform the calculation of de novo fragment formulas.<br> ![img_13.png](img_13.png)
+   4) Fourth tab: This area allows the user to choose whether or not to perform the calculation of de novo fragment formulas.<br>![img_13.png](img_13.png)
    4) Fifth tab: Select the output file format of your preference. By default, all formats are selected.<br>![img_3.png](img_3.png)
    5) Sixth tab: FragHub save the splash keys of previous spectra processed.<br>So that at the next update, only new spectra from the database are processed, and added to previous FragHub processes.<br>Reseting project allows you to delete splash keys and output files from the selected project, in order to start a new project from scratch.<br>![img_4.png](img_4.png)
    6) Click on START button to run the programme.
