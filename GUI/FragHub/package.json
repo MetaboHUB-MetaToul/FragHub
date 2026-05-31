@@ -1,6 +1,6 @@
 {
   "name": "FragHub",
-  "version": "1.4.2",
+  "version": "1.5.0",
   "main": "electron/main.js",
   "type": "module",
   "private": true,
