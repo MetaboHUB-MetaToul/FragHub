@@ -3,9 +3,10 @@
 
     <div class="d-flex h-100 align-center w-100">
 
+      <div class="transition-flex" :style="{ flex: hasFiles ? '0 0 8px' : '1 1 0%' }"></div>
+
       <div
-          class="d-flex flex-column align-center justify-center transition-all flex-shrink-0"
-          :class="hasFiles ? 'ml-2 mr-6' : 'mx-auto'"
+          class="d-flex flex-column align-center justify-center flex-shrink-0 button-zone"
           style="width: 160px;"
       >
         <input
@@ -34,8 +35,8 @@
         </div>
       </div>
 
-      <v-expand-x-transition>
-        <div v-if="hasFiles" class="flex-grow-1 h-100 d-flex flex-column overflow-hidden" style="min-width: 0;">
+      <transition name="slide-panel">
+        <div v-if="hasFiles" class="panel-container d-flex flex-column overflow-hidden" style="min-width: 0; height: 100%;">
 
           <v-card class="w-100 h-100 d-flex flex-column border-0" elevation="2">
 
@@ -51,32 +52,36 @@
 
             <v-card-text class="pa-0 flex-grow-1 overflow-y-auto">
               <v-list density="compact">
-                <v-list-item v-for="(name, index) in fileNames" :key="index" class="border-b">
+                <transition-group name="list-anim">
+                  <v-list-item v-for="(name, index) in fileNames" :key="name + index" class="border-b">
 
-                  <template v-slot:prepend>
-                    <v-icon size="small" color="primary" class="mr-3">mdi-file-outline</v-icon>
-                  </template>
+                    <template v-slot:prepend>
+                      <v-icon size="small" color="primary" class="mr-3">mdi-file-outline</v-icon>
+                    </template>
 
-                  <v-list-item-title class="text-body-2">{{ name }}</v-list-item-title>
+                    <v-list-item-title class="text-body-2">{{ name }}</v-list-item-title>
 
-                  <template v-slot:append>
-                    <v-btn
-                        icon="mdi-delete"
-                        variant="text"
-                        color="error"
-                        size="small"
-                        @click="removeFile(index)"
-                    ></v-btn>
-                  </template>
+                    <template v-slot:append>
+                      <v-btn
+                          icon="mdi-delete"
+                          variant="text"
+                          color="error"
+                          size="small"
+                          @click="removeFile(index)"
+                      ></v-btn>
+                    </template>
 
-                </v-list-item>
+                  </v-list-item>
+                </transition-group>
               </v-list>
             </v-card-text>
 
           </v-card>
 
         </div>
-      </v-expand-x-transition>
+      </transition>
+
+      <div class="transition-flex" :style="{ flex: hasFiles ? '0 0 0%' : '1 1 0%' }"></div>
 
     </div>
 
@@ -149,8 +154,58 @@ const clearAll = () => {
 </script>
 
 <style scoped>
-.transition-all {
-  transition: all 0.5s cubic-bezier(0.25, 0.8, 0.25, 1);
+/* 1. L'animation de glissement du bouton (grâce aux espaceurs flex) */
+.transition-flex {
+  transition: flex 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.button-zone {
+  z-index: 2; /* Garde le bouton au-dessus de l'animation d'ouverture */
+}
+
+/* 2. L'animation du volet qui s'ouvre (Tiroir) */
+.panel-container {
+  flex-grow: 1;
+  will-change: max-width, opacity, transform;
+}
+
+.slide-panel-enter-active,
+.slide-panel-leave-active {
+  transition: max-width 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+  opacity 0.5s ease 0.1s,
+  transform 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+  margin 0.7s ease;
+}
+
+.slide-panel-enter-from,
+.slide-panel-leave-to {
+  max-width: 0;
+  opacity: 0;
+  transform: translateX(-40px); /* Le volet sort de sous le bouton */
+  margin-left: 0 !important;
+}
+
+.slide-panel-enter-to,
+.slide-panel-leave-from {
+  max-width: 100%;
+  opacity: 1;
+  transform: translateX(0);
+  margin-left: 24px !important; /* L'équivalent de ml-6 */
+}
+
+/* 3. Animation de la liste des fichiers (ajout/suppression) */
+.list-anim-enter-active,
+.list-anim-leave-active {
+  transition: all 0.4s ease;
+}
+.list-anim-enter-from,
+.list-anim-leave-to {
+  opacity: 0;
+  transform: translateX(20px); /* Les nouveaux fichiers arrivent par la droite */
+}
+.list-anim-leave-active {
+  position: absolute; /* Empêche la liste de sauter pendant qu'un élément est supprimé */
+  width: 100%;
 }
 
 .border-b {
