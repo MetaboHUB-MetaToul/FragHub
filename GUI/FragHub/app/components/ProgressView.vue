@@ -23,13 +23,25 @@
             {{ log.text }}
           </div>
 
-          <v-row v-else-if="log.type === 'progress_finished'" class="align-center px-2 py-2 mx-0 finished-row">
-            <v-col cols="3" class="font-weight-bold text-caption pa-0">{{ log.prefix }}</v-col>
-            <v-col cols="5" class="pa-0 px-2">
-              <v-progress-linear :model-value="100" height="12" color="grey-darken-1" rounded></v-progress-linear>
-            </v-col>
-            <v-col cols="4" class="text-right text-caption pa-0 text-grey-darken-1">{{ log.suffix }}</v-col>
-          </v-row>
+          <div v-else-if="log.type === 'progress_finished'" class="mt-2 pa-3 finished-progress-zone">
+            <div class="text-subtitle-2 font-weight-bold mb-1 text-green-darken-4">{{ log.prefix }}</div>
+            <v-row class="align-center mx-0">
+              <v-col cols="8" class="pa-0">
+                <v-progress-linear
+                    :model-value="100"
+                    height="20"
+                    color="success"
+                    rounded
+                    class="finished-bar"
+                ></v-progress-linear>
+              </v-col>
+              <v-col cols="4" class="text-right pa-0 text-caption font-weight-bold text-green-darken-4">
+                100.00%
+              </v-col>
+            </v-row>
+            <div class="text-right text-caption text-grey-darken-3 mt-1">{{ log.suffix }}</div>
+          </div>
+
         </div>
 
         <ActiveProgress
@@ -155,7 +167,6 @@ onMounted(() => {
     finalMessage.value = val
     isFinished.value = true
     isStopping.value = false
-    // On n'ajoute PLUS la complétion aux logs pour éviter les doublons
   })
 })
 
@@ -191,8 +202,15 @@ onUnmounted(() => {
   background-color: rgba(255, 255, 255, 0.7) !important;
 }
 
-.finished-row {
-  border-bottom: 1px solid #eee;
-  background-color: rgba(0,0,0,0.02);
+/* Le nouveau style pour l'étape terminée */
+.finished-progress-zone {
+  border: 2px solid #4CAF50; /* Le "tour" en vert success */
+  background-color: rgba(76, 175, 80, 0.05); /* Fond très légèrement vert */
+  border-radius: 8px;
+}
+
+.finished-bar {
+  border: 1px solid #388E3C;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 </style>
