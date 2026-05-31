@@ -2,6 +2,7 @@ import asyncio
 import socketio
 import uvicorn
 import multiprocessing
+import traceback
 from fastapi import FastAPI, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -12,17 +13,22 @@ import scripts.globals_vars as g_vars
 
 loop = None
 
+# --- 1. CORRECTION DU ROUTAGE SOCKET.IO ---
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
-socket_app = socketio.ASGIApp(sio)
-
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-app.mount("/socket.io", socket_app)
+
+# On enveloppe FastAPI DANS SocketIO
+socket_app = socketio.ASGIApp(sio, other_asgi_app=app)
 
 @app.on_event("startup")
 def startup_event():
     global loop
-    loop = asyncio.get_event_loop()
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.get_event_loop()
+    print("[OK] Serveur FastAPI et Socket.IO prets !")
 
 class FragHubParams(BaseModel):
     input_directory: list
@@ -53,63 +59,76 @@ class FragHubParams(BaseModel):
 
 def emit_to_frontend(event, data):
     global loop
-    if loop:
-        asyncio.run_coroutine_threadsafe(sio.emit(event, data), loop)
+    # --- 2. LE MOUCHARD : SANS EMOJIS POUR WINDOWS ---
+    print(f"[EMIT VERS VUE.JS] {event.upper()} : {data}")
 
-# =====================================================================
-# --- CALLBACKS "BOUCLIERS" (Rétrocompatibles avec PyQt6) ---
-# Utilisation de *args pour absorber n'importe quel nombre d'arguments
-# et on ne transmet que le premier (args[0]) au front-end Vue.js.
-# =====================================================================
+    if loop:
+        try:
+            asyncio.run_coroutine_threadsafe(sio.emit(event, data), loop)
+        except Exception as e:
+            print(f"[WARNING] Erreur de communication Socket: {e}")
+
+# --- CALLBACKS BOUCLIERS ---
 def progress_callback(*args):
     if args: emit_to_frontend('progress', args[0])
-
 def total_items_callback(*args):
-    # args contient (total, completed) -> On garde args[0] (le total)
     if args: emit_to_frontend('total_items', args[0])
-
 def prefix_callback(*args):
     if args: emit_to_frontend('prefix', args[0])
-
 def item_type_callback(*args):
     if args: emit_to_frontend('item_type', args[0])
-
 def step_callback(*args):
     if args: emit_to_frontend('step', args[0])
-
 def completion_callback(*args):
     if args: emit_to_frontend('completion', args[0])
-
 def deletion_callback(*args):
     if args: emit_to_frontend('deletion', args[0])
-# =====================================================================
 
+# --- GESTION DU STOP ---
+global_stop_flag = False
+def get_stop_flag(): return global_stop_flag
+
+@app.get("/stop-analysis")
+async def stop_analysis():
+    global global_stop_flag
+    global_stop_flag = True
+    return {"status": "stopped"}
 
 @app.get("/init-data")
 async def init_data():
-    # Déclenche le chargement multithreadé de PubChem et des ontologies
     g_vars.load_internal_databases()
     return {"status": "loaded"}
 
+# --- 3. LE BOUCLIER ANTI-CRASH SILENCIEUX ---
+def execute_main_safely():
+    print("\n[START] Lancement de MAIN.py en tache de fond...")
+    try:
+        MAIN(
+            progress_callback=progress_callback,
+            total_items_callback=total_items_callback,
+            prefix_callback=prefix_callback,
+            item_type_callback=item_type_callback,
+            step_callback=step_callback,
+            completion_callback=completion_callback,
+            deletion_callback=deletion_callback,
+            stop_flag=get_stop_flag
+        )
+    except Exception as e:
+        print(f"\n[ERROR] ERREUR CRITIQUE DANS MAIN.PY :")
+        traceback.print_exc() # Imprime l'erreur exacte dans ta console !
+        emit_to_frontend('deletion', f"CRASH: {str(e)}")
+        emit_to_frontend('completion', "PROCESS FAILED (Check console)")
+
 @app.post("/run-analysis")
 async def run_analysis(params: FragHubParams, background_tasks: BackgroundTasks):
-    params_data = params.model_dump(by_alias=True)
+    global global_stop_flag
+    global_stop_flag = False
 
-    # Mise à jour du dict global en mémoire
+    params_data = params.model_dump(by_alias=True)
     for key, value in params_data.items():
         parameters_dict[key] = value
 
-    # Lancement de la tâche lourde en arrière-plan avec les callbacks
-    background_tasks.add_task(
-        MAIN,
-        progress_callback=progress_callback,
-        total_items_callback=total_items_callback,
-        prefix_callback=prefix_callback,
-        item_type_callback=item_type_callback,
-        step_callback=step_callback,
-        completion_callback=completion_callback,
-        deletion_callback=deletion_callback
-    )
+    background_tasks.add_task(execute_main_safely)
     return {"status": "started"}
 
 @app.get("/health")
@@ -118,6 +137,5 @@ async def health_check():
 
 
 if __name__ == "__main__":
-    # Sécurité vitale pour empêcher le Silent Crash sous Windows compilé
     multiprocessing.freeze_support()
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run(socket_app, host="127.0.0.1", port=8000)

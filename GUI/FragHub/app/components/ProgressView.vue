@@ -1,74 +1,89 @@
 <template>
   <v-container class="h-100 d-flex flex-column pa-4" fluid>
     <div class="text-center mb-4">
-      <v-img src="~/assets/FragHub_icon.png" max-width="80" class="mx-auto"></v-img>
-      <h2 class="text-h5 font-weight-bold mt-2">Processing Analysis</h2>
+      <v-img src="~/assets/FragHub_icon.png" max-width="100" class="mx-auto"></v-img>
     </div>
 
-    <v-tabs v-model="activeView" color="primary" grow class="mb-4">
-      <v-tab value="progress">
-        <v-icon start>mdi-progress-clock</v-icon> Progress
-      </v-tab>
-      <v-tab value="report">
-        <v-icon start>mdi-text-box-outline</v-icon> Report
-      </v-tab>
-    </v-tabs>
+    <div class="d-flex flex-column flex-grow-1" style="gap: 16px;">
 
-    <v-window v-model="activeView" class="flex-grow-1">
+      <v-card class="flex-grow-1 d-flex flex-column border" elevation="2" style="min-height: 250px;">
+        <v-tabs v-model="tabReport" bg-color="grey-lighten-3" density="compact">
+          <v-tab value="report">Report</v-tab>
+        </v-tabs>
+        <v-card-text class="flex-grow-1 overflow-y-auto pa-2 bg-white" ref="reportContainer">
+          <div v-for="(log, i) in logs" :key="i" class="mb-1">
 
-      <v-window-item value="progress" class="fill-height">
-        <v-card class="pa-4 h-100 d-flex flex-column justify-center" elevation="2">
-          <div class="text-h6 mb-2">{{ currentPrefix }}</div>
+            <div v-if="log.type === 'step'" class="text-center font-weight-bold text-subtitle-1 my-3">
+              {{ log.text }}
+            </div>
 
-          <v-progress-linear
-              v-model="progressPercent"
-              height="30"
-              color="primary"
-              striped
-              rounded
-              class="mb-4"
-          >
-            <strong>{{ progressPercent.toFixed(1) }}%</strong>
-          </v-progress-linear>
+            <div v-else-if="log.type === 'deletion'" class="text-center text-red font-weight-medium text-subtitle-1 my-1">
+              {{ log.text }}
+            </div>
 
-          <div class="d-flex justify-space-between text-body-2 text-grey-darken-1">
-            <span>{{ processedItems }} / {{ totalItems }} {{ itemType }}</span>
-            <span>Speed: {{ itemsPerSecond.toFixed(2) }} {{ itemType }}/s</span>
-            <span>ETA: {{ formatTime(estimatedTimeLeft) }}</span>
+            <div v-else-if="log.type === 'completion'" class="text-center font-weight-bold text-h6 text-green my-3">
+              {{ log.text }}
+            </div>
+
+            <v-row v-else-if="log.type === 'progress_finished'" class="align-center px-2 py-1 mx-0" style="border-bottom: 1px solid #eee;">
+              <v-col cols="4" class="font-weight-bold text-caption pa-0">{{ log.prefix }}</v-col>
+              <v-col cols="4" class="pa-0 px-2">
+                <v-progress-linear model-value="100" height="18" color="blue-darken-1" rounded class="border"></v-progress-linear>
+              </v-col>
+              <v-col cols="4" class="text-right text-caption pa-0">{{ log.suffix }}</v-col>
+            </v-row>
+
           </div>
-        </v-card>
-      </v-window-item>
+        </v-card-text>
+      </v-card>
 
-      <v-window-item value="report" class="fill-height">
-        <v-card class="h-100 overflow-y-auto" elevation="2" id="report-container">
-          <v-list density="compact">
-            <v-list-item v-for="(log, i) in logs" :key="i" class="border-b">
-              <template v-slot:prepend>
-                <v-icon :color="log.type === 'error' ? 'error' : 'primary'" size="small">
-                  {{ log.type === 'error' ? 'mdi-alert-circle' : 'mdi-chevron-right' }}
-                </v-icon>
-              </template>
-              <v-list-item-title :class="log.type === 'error' ? 'text-red font-weight-bold' : ''">
-                {{ log.text }}
-              </v-list-item-title>
-            </v-list-item>
-          </v-list>
-        </v-card>
-      </v-window-item>
-    </v-window>
+      <v-card class="pa-0 flex-shrink-0 border" elevation="2">
+        <v-tabs v-model="tabProgress" bg-color="grey-lighten-3" density="compact">
+          <v-tab value="progress">Progress</v-tab>
+        </v-tabs>
+        <v-card-text class="pa-4 bg-white">
+          <div v-if="!isFinished">
+            <div class="text-subtitle-1 font-weight-medium mb-1">{{ currentPrefix }}</div>
+            <v-progress-linear
+                v-model="progressPercent"
+                height="24"
+                color="blue-darken-1"
+                rounded
+                class="mb-2"
+                style="border: 1px solid #ccc;"
+            ></v-progress-linear>
+            <div class="text-right text-subtitle-2 text-grey-darken-2">
+              {{ suffixText }}
+            </div>
+          </div>
+          <div v-else class="text-center">
+            <div class="text-h5 font-weight-bold my-4">{{ finalMessage }}</div>
+          </div>
+        </v-card-text>
+      </v-card>
+
+    </div>
 
     <div class="d-flex justify-center mt-6">
       <v-btn
           v-if="!isFinished"
           color="error"
           size="x-large"
-          prepend-icon="mdi-stop-circle"
+          width="150"
+          class="font-weight-bold"
           @click="stopProcess"
           :loading="isStopping"
       >
         {{ isStopping ? 'STOPPING...' : 'STOP' }}
       </v-btn>
-      <v-btn v-else color="success" size="x-large" prepend-icon="mdi-check" @click="finishProcess">
+      <v-btn
+          v-else
+          color="success"
+          size="x-large"
+          width="150"
+          class="font-weight-bold"
+          @click="finishProcess"
+      >
         FINISH
       </v-btn>
     </div>
@@ -76,15 +91,17 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { io } from "socket.io-client"
 import { useState } from '#imports'
 
 const socket = io("http://127.0.0.1:8000")
-const activeView = ref('progress')
 const isExecuting = useState('isExecuting')
 
-// États de progression (Logique identique au ProgressBarWidget de PyQt)
+const tabReport = ref('report')
+const tabProgress = ref('progress')
+const reportContainer = ref(null)
+
 const logs = ref([])
 const progressValue = ref(0)
 const totalItems = ref(100)
@@ -93,62 +110,126 @@ const itemType = ref('items')
 const startTime = ref(Date.now())
 const isFinished = ref(false)
 const isStopping = ref(false)
+const finalMessage = ref('')
+let hasReportedCurrentTask = false
+let timerInterval = null;
 
-const progressPercent = computed(() => (totalItems.value > 0 ? (progressValue.value / totalItems.value) * 100 : 0))
+// --- CALCULS DU PROGRESS BAR ---
+const progressPercent = computed(() => {
+  if (totalItems.value <= 0) return 0;
+  return (progressValue.value / totalItems.value) * 100;
+})
 
-// Calculs de performance (ETA, Vitesse)
-const processedItems = computed(() => progressValue.value)
 const itemsPerSecond = computed(() => {
   const elapsed = (Date.now() - startTime.value) / 1000
   return elapsed > 0 ? progressValue.value / elapsed : 0
 })
+
 const estimatedTimeLeft = computed(() => {
   const remaining = totalItems.value - progressValue.value
   return itemsPerSecond.value > 0 ? remaining / itemsPerSecond.value : 0
 })
 
 const formatTime = (seconds) => {
+  if (!isFinite(seconds) || seconds < 0) return "00:00:00"
   const h = Math.floor(seconds / 3600).toString().padStart(2, '0')
   const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0')
   const s = Math.floor(seconds % 60).toString().padStart(2, '0')
   return `${h}:${m}:${s}`
 }
 
+// Le format texte EXACT de ton ancien PyQt6
+const suffixText = computed(() => {
+  const pct = progressPercent.value.toFixed(2)
+  const prog = progressValue.value
+  const tot = totalItems.value
+  const it = itemType.value
+  const elapsed = (Date.now() - startTime.value) / 1000
+  const speed = itemsPerSecond.value.toFixed(2)
+  const eta = estimatedTimeLeft.value
+  return `${pct}% | ${prog}/${tot} ${it} [${formatTime(elapsed)} < ${formatTime(eta)}, ${speed} ${it}/s]`
+})
+
+// Auto-Scroll vers le bas
+const scrollToBottom = async () => {
+  await nextTick()
+  if (reportContainer.value) {
+    const el = reportContainer.value.$el || reportContainer.value;
+    el.scrollTop = el.scrollHeight
+  }
+}
+
+// --- LOGIQUE MAGIQUE DE PYQT : LA FAUSSE BARRE À 100% ---
+watch(progressValue, (newVal) => {
+  if (newVal >= totalItems.value && totalItems.value > 0 && !hasReportedCurrentTask) {
+    logs.value.push({
+      type: 'progress_finished',
+      prefix: currentPrefix.value,
+      suffix: suffixText.value
+    })
+    hasReportedCurrentTask = true
+    scrollToBottom()
+  }
+})
+
+// --- ÉCOUTE DES SOCKETS ---
 onMounted(() => {
   startTime.value = Date.now()
 
+  // Force le timer à se rafraîchir chaque seconde pour les calculs d'ETA
+  timerInterval = setInterval(() => {
+    if (!isFinished.value && progressValue.value < totalItems.value) {
+      progressValue.value = progressValue.value // Déclenche la réactivité
+    }
+  }, 1000);
+
   socket.on('progress', (val) => { progressValue.value = val })
-  socket.on('total_items', (val) => { totalItems.value = val })
+
+  socket.on('total_items', (val) => {
+    totalItems.value = val
+    startTime.value = Date.now()
+    progressValue.value = 0
+    hasReportedCurrentTask = false // Réinitialise pour la prochaine barre
+  })
+
   socket.on('prefix', (val) => { currentPrefix.value = val })
   socket.on('item_type', (val) => { itemType.value = val })
 
   socket.on('step', (val) => {
-    logs.value.push({ text: val, type: 'info' })
+    logs.value.push({ text: val, type: 'step' })
+    scrollToBottom()
   })
 
   socket.on('deletion', (val) => {
-    logs.value.push({ text: val, type: 'error' })
+    logs.value.push({ text: val, type: 'deletion' })
+    scrollToBottom()
   })
 
   socket.on('completion', (val) => {
-    logs.value.push({ text: val, type: 'info' })
+    finalMessage.value = val;
+    logs.value.push({ text: val, type: 'completion' })
     isFinished.value = true
+    isStopping.value = false
+    scrollToBottom()
   })
 })
 
-const stopProcess = () => {
+const stopProcess = async () => {
   isStopping.value = true
-  socket.emit('stop_request') // Backend devra gérer cet arrêt
+  // Envoie une requête au serveur pour activer le stop_flag de MAIN.py
+  await fetch('http://127.0.0.1:8000/stop-analysis')
 }
 
 const finishProcess = () => {
   isExecuting.value = false
 }
 
-onUnmounted(() => { socket.disconnect() })
+onUnmounted(() => {
+  clearInterval(timerInterval)
+  socket.disconnect()
+})
 </script>
 
 <style scoped>
-.border-b { border-bottom: 1px solid #e0e0e0; }
-#report-container { background: #f9f9f9; }
+.border { border: 1px solid #e0e0e0; }
 </style>
