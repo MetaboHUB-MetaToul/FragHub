@@ -23,23 +23,36 @@
             {{ log.text }}
           </div>
 
-          <div v-else-if="log.type === 'progress_finished'" class="mt-2 pa-3 finished-progress-zone">
-            <div class="text-subtitle-2 font-weight-bold mb-1 text-green-darken-4">{{ log.prefix }}</div>
-            <v-row class="align-center mx-0">
-              <v-col cols="8" class="pa-0">
-                <v-progress-linear
-                    :model-value="100"
-                    height="20"
-                    color="success"
-                    rounded
-                    class="finished-bar"
-                ></v-progress-linear>
-              </v-col>
-              <v-col cols="4" class="text-right pa-0 text-caption font-weight-bold text-green-darken-4">
-                100.00%
-              </v-col>
-            </v-row>
-            <div class="text-right text-caption text-grey-darken-3 mt-1">{{ log.suffix }}</div>
+          <div v-else-if="log.type === 'progress_finished'" class="mt-2 finished-progress-zone">
+            <div class="d-flex align-center justify-start mb-3">
+              <v-icon color="success" class="mr-2" size="22">mdi-check-circle-outline</v-icon>
+              <div class="text-subtitle-1 font-weight-bold text-green-darken-4 text-truncate">
+                {{ log.prefix.replace(/:\s*$/, '') }}
+              </div>
+            </div>
+
+            <v-progress-linear
+                :model-value="100"
+                height="26"
+                color="success"
+                rounded
+                class="finished-bar"
+            >
+              <template v-slot:default>
+                <span class="text-white font-weight-black text-caption px-2 drop-shadow">
+                  100.00%
+                </span>
+              </template>
+            </v-progress-linear>
+
+            <div class="d-flex justify-space-between mt-2">
+              <div class="text-caption text-green-darken-3 font-weight-bold text-left">
+                {{ log.current }} of {{ log.total }} {{ log.itemType }} &nbsp;|&nbsp; Elapsed: {{ log.elapsed }} &nbsp;|&nbsp; ETA: 00:00:00
+              </div>
+              <div class="text-caption text-green-darken-3 font-weight-bold text-right">
+                {{ log.speed }} {{ log.itemType }}/s
+              </div>
+            </div>
           </div>
 
         </div>
@@ -48,7 +61,12 @@
             v-if="!isFinished"
             :prefix="currentPrefix"
             :progress-percent="progressPercent"
-            :suffix="suffixText"
+            :current="progressValue"
+            :total="totalItems"
+            :item-type="itemType"
+            :elapsed="formattedElapsed"
+            :eta="formattedEta"
+            :speed="speedVal"
         />
 
         <div v-else class="text-center py-8">
@@ -85,6 +103,7 @@ const logs = ref([])
 const currentPrefix = ref('Initializing...')
 const itemType = ref('items')
 const startTime = ref(Date.now())
+const now = ref(Date.now()) // NOUVEAU: Variable réactive pour forcer la mise à jour du chronomètre
 const isFinished = ref(false)
 const isStopping = ref(false)
 const finalMessage = ref('')
@@ -94,17 +113,31 @@ const totalItems = ref(0)
 let taskFinishedLogged = false
 let timerHandle = null
 
+// --- Calculs Mathématiques ---
 const progressPercent = computed(() => {
   if (totalItems.value <= 0) return 0
   return Math.min((progressValue.value / totalItems.value) * 100, 100)
 })
 
-const suffixText = computed(() => {
-  const elapsed = (Date.now() - startTime.value) / 1000
-  const speed = elapsed > 0 ? (progressValue.value / elapsed).toFixed(2) : 0
-  const eta = speed > 0 ? (totalItems.value - progressValue.value) / speed : 0
-  return `${progressValue.value}/${totalItems.value} ${itemType.value} [${formatTime(elapsed)} < ${formatTime(eta)}, ${speed} ${itemType.value}/s]`
+const elapsedSec = computed(() => {
+  const e = (now.value - startTime.value) / 1000
+  return e > 0 ? e : 0
 })
+
+const speedVal = computed(() => {
+  // On bloque le calcul de vitesse si moins d'1 seconde s'est écoulée
+  // pour éviter les valeurs aberrantes dues aux divisions proches de 0.
+  if (progressValue.value === 0 || elapsedSec.value < 1) return "0.00"
+  return (progressValue.value / elapsedSec.value).toFixed(2)
+})
+
+const etaSec = computed(() => {
+  const speed = parseFloat(speedVal.value)
+  return speed > 0 ? (totalItems.value - progressValue.value) / speed : 0
+})
+
+const formattedElapsed = computed(() => formatTime(elapsedSec.value))
+const formattedEta = computed(() => formatTime(etaSec.value))
 
 const formatTime = (s) => {
   if (!isFinite(s) || s < 0) return '00:00:00'
@@ -129,17 +162,25 @@ watch([logs, progressValue], () => {
 function checkTaskFinished() {
   if (!taskFinishedLogged && totalItems.value > 0 && progressValue.value >= totalItems.value) {
     taskFinishedLogged = true
+
+    // On passe toutes les données séparément pour maintenir le design
     logs.value.push({
       type: 'progress_finished',
       prefix: currentPrefix.value,
-      suffix: suffixText.value
+      current: progressValue.value,
+      total: totalItems.value,
+      itemType: itemType.value,
+      elapsed: formattedElapsed.value,
+      speed: speedVal.value
     })
   }
 }
 
 onMounted(() => {
   startTime.value = Date.now()
-  timerHandle = setInterval(() => { /* force computed update */ }, 1000)
+  now.value = Date.now()
+  // Met à jour la variable réactive 'now' toutes les secondes pour actualiser le temps
+  timerHandle = setInterval(() => { now.value = Date.now() }, 1000)
 
   socket.on('progress', (val) => {
     progressValue.value = val
@@ -154,6 +195,7 @@ onMounted(() => {
     progressValue.value = 0
     totalItems.value = val
     startTime.value = Date.now()
+    now.value = Date.now()
     taskFinishedLogged = false
   })
 
@@ -202,15 +244,20 @@ onUnmounted(() => {
   background-color: rgba(255, 255, 255, 0.7) !important;
 }
 
-/* Le nouveau style pour l'étape terminée */
 .finished-progress-zone {
-  border: 2px solid #4CAF50; /* Le "tour" en vert success */
-  background-color: rgba(76, 175, 80, 0.05); /* Fond très légèrement vert */
-  border-radius: 8px;
+  border: 2px solid #4CAF50;
+  background-color: rgba(76, 175, 80, 0.05);
+  padding: 16px;
+  border-radius: 12px;
 }
 
 .finished-bar {
   border: 1px solid #388E3C;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.15);
+}
+
+.drop-shadow {
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.6);
+  letter-spacing: 1px;
 }
 </style>
