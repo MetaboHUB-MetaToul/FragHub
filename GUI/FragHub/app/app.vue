@@ -9,7 +9,7 @@
         opacity="1"
     >
       <div class="text-center d-flex flex-column align-center">
-        <v-img src="~/assets/FragHub_icon.png" width="150" class="mb-6"></v-img>
+        <v-img src="~/assets/FragHub_icon.png" width="400" class="mb-8"></v-img>
 
         <v-progress-circular
             indeterminate
@@ -18,7 +18,7 @@
             width="7"
         ></v-progress-circular>
 
-        <h2 class="text-h5 font-weight-bold mt-6 text-grey-darken-3">
+        <h2 class="text-h5 font-weight-bold mt-8 text-grey-darken-3">
           {{ splashMessage }}
         </h2>
       </div>
