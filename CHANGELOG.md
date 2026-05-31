@@ -1,6 +1,9 @@
 # Change Log
 All notable changes to this project will be documented in this file.
 
+- **31_05_2026**:
+  - modernizing GUI and desktop integration with Nuxt 4 + electron.js 
+
 - **01_10_2025**:
   - fixing missing headers issue when writing a previously not existing csv file.
   - optimizing peaks filter with Numba just-in-time (jit)
