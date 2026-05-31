@@ -112,7 +112,7 @@ let checkInterval = null
 
 // --- Variables d'état du Splash Screen ---
 const showSplash = ref(true)
-const splashMessage = ref("Starting FastAPI Server...")
+const splashMessage = ref("Starting FragHub")
 
 const parameters = useState('parameters', () => ({
   input_directory: [],
@@ -159,7 +159,7 @@ const checkBackendStatus = async () => {
 
 // 2. Fonction pour déclencher le chargement des CSV via FastAPI
 const loadInternalDatabases = async () => {
-  splashMessage.value = "Loading internal databases (Multithreading)..."
+  splashMessage.value = "Loading internal databases"
   try {
     const response = await fetch('http://127.0.0.1:8000/init-data')
     if (response.ok) {
