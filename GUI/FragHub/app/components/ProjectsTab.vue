@@ -7,8 +7,8 @@
         :true-value="1.0"
         :false-value="0.0"
         :disabled="!isProjectDir"
-        color="error"
-        label="YES / NO"
+        :color="parameters.reset_updates === 1.0 ? 'success' : 'error'"
+        :label="parameters.reset_updates === 1.0 ? 'YES' : 'NO'"
         inset
         size="x-large"
     ></v-switch>
@@ -16,14 +16,21 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 const parameters = useState('parameters')
 
-// Logique de validation : le bouton n'est cliquable que si output_directory contient '.fraghub'
-// Note: En mode web, le check se fera par une requête API, ici on simule :
+// Le bouton n'est cliquable que si output_directory contient 'FragHub'
 const isProjectDir = computed(() => {
   return parameters.value.output_directory && parameters.value.output_directory.includes('FragHub')
 })
+
+// FILET DE SÉCURITÉ : reproduit le comportement de votre ancien code PyQt.
+// Si le dossier n'est pas un projet valide, on remet de force l'interrupteur sur NO (0.0).
+watch(isProjectDir, (isValid) => {
+  if (!isValid) {
+    parameters.value.reset_updates = 0.0
+  }
+}, { immediate: true })
 </script>
 
 <style scoped>
@@ -34,5 +41,11 @@ const isProjectDir = computed(() => {
   0% { opacity: 1; }
   50% { opacity: 0.3; }
   100% { opacity: 1; }
+}
+
+/* On force le texte du label à être bien visible */
+:deep(.v-switch .v-label) {
+  font-size: 1.5rem;
+  font-weight: bold;
 }
 </style>
