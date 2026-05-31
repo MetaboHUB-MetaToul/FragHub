@@ -1,14 +1,17 @@
 import asyncio
 import socketio
 import uvicorn
+import multiprocessing
 from fastapi import FastAPI, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-# 1. IMPORTS CORRIGÉS : On précise le dossier "scripts" !
 from scripts.MAIN import MAIN
+# ON IMPORTE DEPUIS LE NOUVEAU FICHIER (plus aucun lien avec PyQt)
 from scripts.backend_vars import parameters_dict
-# 2. Setup global pour stocker la loop
+import scripts.globals_vars as g_vars
+
+
 loop = None
 
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
@@ -18,13 +21,12 @@ app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 app.mount("/socket.io", socket_app)
 
-# 3. Capture de la loop au démarrage de FastAPI
 @app.on_event("startup")
 def startup_event():
     global loop
     loop = asyncio.get_event_loop()
 
-# Modèle (avec correction Pydantic V2)
+
 class FragHubParams(BaseModel):
     input_directory: list
     output_directory: str
@@ -46,36 +48,48 @@ class FragHubParams(BaseModel):
     de_novo_ppm_tolerance: float
     csv: float
     msp: float
-    json_enabled: float = Field(alias='json') # Alias pour éviter conflit avec le mot-clé json
+    json_enabled: float = Field(alias='json')
     reset_updates: float
 
     class Config:
         populate_by_name = True
 
-# 4. Fonction d'émission corrigée
 def emit_to_frontend(event, data):
     global loop
     if loop:
-        # On utilise la loop capturée au démarrage
         asyncio.run_coroutine_threadsafe(sio.emit(event, data), loop)
 
-# Tes callbacks
+# --- TOUS TES CALLBACKS SONT LÀ (Même ceux pour la progress bar !) ---
 def progress_callback(val): emit_to_frontend('progress', val)
+def total_items_callback(val): emit_to_frontend('total_items', val)
+def prefix_callback(val): emit_to_frontend('prefix', val)
+def item_type_callback(val): emit_to_frontend('item_type', val)
 def step_callback(val): emit_to_frontend('step', val)
 def completion_callback(val): emit_to_frontend('completion', val)
 def deletion_callback(val): emit_to_frontend('deletion', val)
 
+
+@app.get("/init-data")
+async def init_data():
+    # Déclenche le chargement multithreadé de PubChem et des ontologies
+    g_vars.load_internal_databases()
+    return {"status": "loaded"}
+
 @app.post("/run-analysis")
 async def run_analysis(params: FragHubParams, background_tasks: BackgroundTasks):
-    # Utilise model_dump() au lieu de dict() (Fix Pydantic V2)
     params_data = params.model_dump(by_alias=True)
 
+    # Ta logique est conservée : on met à jour le dict global en mémoire
     for key, value in params_data.items():
         parameters_dict[key] = value
 
+    # On passe tous les callbacks requis par MAIN
     background_tasks.add_task(
         MAIN,
         progress_callback=progress_callback,
+        total_items_callback=total_items_callback,
+        prefix_callback=prefix_callback,
+        item_type_callback=item_type_callback,
         step_callback=step_callback,
         completion_callback=completion_callback,
         deletion_callback=deletion_callback
@@ -87,4 +101,6 @@ async def health_check():
     return {"status": "ok"}
 
 if __name__ == "__main__":
+    # Sécurité vitale pour empêcher le Silent Crash sous Windows compilé
+    multiprocessing.freeze_support()
     uvicorn.run(app, host="127.0.0.1", port=8000)
