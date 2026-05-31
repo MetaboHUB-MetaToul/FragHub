@@ -14,15 +14,12 @@
       <v-card-text class="pa-4 bg-white-transparent" ref="reportContainer" style="flex: 1 1 auto; overflow-y: auto; min-height: 0;">
 
         <div v-for="(log, i) in logs" :key="i" class="mb-1">
+
           <div v-if="log.type === 'step'" class="text-center font-weight-bold text-subtitle-1 my-4 text-blue-darken-3">
             {{ log.text }}
           </div>
 
-          <div v-else-if="log.type === 'deletion'" class="text-center text-red-darken-2 font-weight-medium text-subtitle-2 my-1">
-            {{ log.text }}
-          </div>
-
-          <div v-else-if="log.type === 'completion'" class="text-center font-weight-bold text-h5 text-green-darken-2 my-6">
+          <div v-else-if="log.type === 'deletion'" class="text-center text-red-darken-2 font-weight-medium text-subtitle-2 my-1" style="white-space: pre-line;">
             {{ log.text }}
           </div>
 
@@ -35,24 +32,12 @@
           </v-row>
         </div>
 
-        <div v-if="!isFinished" class="mt-4 pt-4 active-progress-zone">
-          <div class="text-subtitle-2 font-weight-bold mb-1 text-blue-darken-4">{{ currentPrefix }}</div>
-          <v-row class="align-center mx-0">
-            <v-col cols="8" class="pa-0">
-              <v-progress-linear
-                  v-model="progressPercent"
-                  height="20"
-                  color="blue-darken-2"
-                  rounded
-                  class="active-bar"
-              ></v-progress-linear>
-            </v-col>
-            <v-col cols="4" class="text-right pa-0 text-caption font-weight-bold">
-              {{ progressPercent.toFixed(2) }}%
-            </v-col>
-          </v-row>
-          <div class="text-right text-caption text-grey-darken-3 mt-1">{{ suffixText }}</div>
-        </div>
+        <ActiveProgress
+            v-if="!isFinished"
+            :prefix="currentPrefix"
+            :progress-percent="progressPercent"
+            :suffix="suffixText"
+        />
 
         <div v-else class="text-center py-8">
           <v-icon color="success" size="64" class="mb-4">mdi-check-circle</v-icon>
@@ -78,6 +63,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { io } from "socket.io-client"
 import { useState } from '#imports'
+import ActiveProgress from '~/components/ActiveProgress.vue'
 
 const socket = io("http://127.0.0.1:8000")
 const isExecuting = useState('isExecuting')
@@ -96,7 +82,6 @@ const totalItems = ref(0)
 let taskFinishedLogged = false
 let timerHandle = null
 
-// --- Calculs ---
 const progressPercent = computed(() => {
   if (totalItems.value <= 0) return 0
   return Math.min((progressValue.value / totalItems.value) * 100, 100)
@@ -106,7 +91,6 @@ const suffixText = computed(() => {
   const elapsed = (Date.now() - startTime.value) / 1000
   const speed = elapsed > 0 ? (progressValue.value / elapsed).toFixed(2) : 0
   const eta = speed > 0 ? (totalItems.value - progressValue.value) / speed : 0
-
   return `${progressValue.value}/${totalItems.value} ${itemType.value} [${formatTime(elapsed)} < ${formatTime(eta)}, ${speed} ${itemType.value}/s]`
 })
 
@@ -118,7 +102,6 @@ const formatTime = (s) => {
   return `${h}:${m}:${sec}`
 }
 
-// --- Auto-scroll quand les logs ou la progression changent ---
 const scrollToBottom = async () => {
   await nextTick()
   if (reportContainer.value) {
@@ -127,7 +110,6 @@ const scrollToBottom = async () => {
   }
 }
 
-// On surveille les logs et la valeur de progression pour scroller
 watch([logs, progressValue], () => {
   scrollToBottom()
 }, { deep: true })
@@ -171,9 +153,9 @@ onMounted(() => {
   socket.on('completion', (val) => {
     progressValue.value = totalItems.value
     finalMessage.value = val
-    logs.value.push({ text: val, type: 'completion' })
     isFinished.value = true
     isStopping.value = false
+    // On n'ajoute PLUS la complétion aux logs pour éviter les doublons
   })
 })
 
@@ -191,7 +173,6 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-/* Fond avec logo transparent */
 .background-logo-overlay {
   position: absolute;
   top: 50%;
@@ -213,27 +194,5 @@ onUnmounted(() => {
 .finished-row {
   border-bottom: 1px solid #eee;
   background-color: rgba(0,0,0,0.02);
-}
-
-.active-progress-zone {
-  border-top: 2px solid #2196F3;
-  background-color: rgba(33, 150, 243, 0.05);
-  margin-top: 20px;
-  padding: 15px;
-  border-radius: 8px;
-}
-
-/* Comportement instantané (façon PyQt) */
-:deep(.v-progress-linear__determinate) {
-  transition: none !important;
-}
-
-.active-bar {
-  border: 1px solid #1565C0;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-.border {
-  border: 1px solid #d1d1d1 !important;
 }
 </style>
