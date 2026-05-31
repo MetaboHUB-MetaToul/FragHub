@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8" />
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            width: 600px;
+            height: 450px;
+            background: transparent; /* Suppression du fond blanc */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            overflow: hidden;
+            -webkit-app-region: drag; /* Draggable */
+            user-select: none;
+        }
+
+        img {
+            width: 250px; /* Logo agrandi à 250px */
+            margin-bottom: 40px;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.7; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.05); }
+            100% { opacity: 0.7; transform: scale(1); }
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 6px solid rgba(255, 255, 255, 0.3);
+            border-top-color: #1976D2;
+            border-radius: 50%;
+            animation: spin 0.9s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        #message {
+            font-size: 16px;
+            font-weight: 600;
+            color: #333;
+            letter-spacing: 0.5px;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 5px 15px;
+            border-radius: 20px;
+        }
+    </style>
+</head>
+<body>
+<img id="logo" src="" alt="FragHub" />
+<div class="spinner"></div>
+<p id="message">Starting FragHub…</p>
+
+<script>
+    window.electronAPI?.onSplashMessage?.((msg) => {
+        document.getElementById('message').textContent = msg
+    })
+</script>
+</body>
+</html>

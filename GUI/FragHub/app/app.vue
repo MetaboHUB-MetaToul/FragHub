@@ -1,30 +1,7 @@
 <template>
   <v-app theme="light">
 
-    <v-overlay
-        :model-value="showSplash"
-        class="align-center justify-center"
-        persistent
-        scrim="#ffffff"
-        opacity="1"
-    >
-      <div class="text-center d-flex flex-column align-center">
-        <v-img src="~/assets/FragHub_icon.png" width="400" class="mb-8"></v-img>
-
-        <v-progress-circular
-            indeterminate
-            color="primary"
-            size="70"
-            width="7"
-        ></v-progress-circular>
-
-        <h2 class="text-h5 font-weight-bold mt-8 text-grey-darken-3">
-          {{ splashMessage }}
-        </h2>
-      </div>
-    </v-overlay>
-
-    <v-main v-if="!showSplash">
+    <v-main>
       <v-container class="fill-height position-relative pa-0" fluid>
 
         <div class="background-logo">
@@ -85,10 +62,8 @@
               elevation="8"
               class="start-btn text-h6 font-weight-bold"
               @click="startExecution"
-              :disabled="!isBackendReady"
-              :loading="!isBackendReady"
           >
-            {{ isBackendReady ? 'START' : 'INITIALIZING...' }}
+            START
           </v-btn>
         </v-card>
 
@@ -107,13 +82,8 @@ import ProgressView from '~/components/ProgressView.vue'
 const activeTab = ref('input')
 const isDarkMode = ref(false)
 const isExecuting = useState('isExecuting', () => false)
-const isBackendReady = ref(false)
-let checkInterval = null
 
-// --- Variables d'état du Splash Screen ---
-const showSplash = ref(true)
-const splashMessage = ref("Starting FragHub")
-
+// Le splash est géré par Electron — app.vue s'affiche directement prête
 const parameters = useState('parameters', () => ({
   input_directory: [],
   output_directory: "",
@@ -139,40 +109,6 @@ const parameters = useState('parameters', () => ({
   reset_updates: 0.0
 }))
 
-// 1. Vérification de la santé du serveur
-const checkBackendStatus = async () => {
-  try {
-    const response = await fetch('http://127.0.0.1:8000/health')
-    if (response.ok) {
-      console.log("✅ Backend Python prêt !");
-      clearInterval(checkInterval)
-
-      // Le serveur est là, on lance le chargement des CSV !
-      await loadInternalDatabases()
-    } else {
-      console.warn("⚠️ Le backend répond, mais avec une erreur :", response.status);
-    }
-  } catch (err) {
-    console.log("⏳ Serveur Python injoignable (Crash ou démarrage en cours)...");
-  }
-}
-
-// 2. Fonction pour déclencher le chargement des CSV via FastAPI
-const loadInternalDatabases = async () => {
-  splashMessage.value = "Loading internal databases"
-  try {
-    const response = await fetch('http://127.0.0.1:8000/init-data')
-    if (response.ok) {
-      console.log("✅ Données chargées en RAM !");
-      isBackendReady.value = true
-      showSplash.value = false // On cache le splash screen, l'application apparaît
-    }
-  } catch (err) {
-    splashMessage.value = "Error loading databases. Please restart."
-    console.error("Erreur lors du chargement des données :", err)
-  }
-}
-
 watch(isDarkMode, async (val) => {
   const DarkReader = await import('darkreader')
   if (val) {
@@ -185,23 +121,12 @@ watch(isDarkMode, async (val) => {
 onMounted(async () => {
   const DarkReader = await import('darkreader')
   DarkReader.disable()
-
-  // Lance la vérification toutes les secondes au démarrage
-  checkInterval = setInterval(checkBackendStatus, 1000)
-  checkBackendStatus() // Premier appel immédiat
 })
 
-onUnmounted(() => {
-  if (checkInterval) clearInterval(checkInterval)
-})
-
-// --- DANS app.vue ---
 const startExecution = async () => {
-  // 1. On affiche l'écran de chargement IMMÉDIATEMENT
-  // Cela permet à ProgressView.vue de se monter et au Socket de se connecter
+  // Affiche l'écran de progression immédiatement pour que le socket soit prêt
   isExecuting.value = true
 
-  // 2. On attend 500ms pour être sûr à 100% que le frontend écoute
   setTimeout(async () => {
     try {
       const response = await fetch('http://127.0.0.1:8000/run-analysis', {
@@ -209,17 +134,16 @@ const startExecution = async () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(parameters.value),
       })
-
       if (!response.ok) {
         const errorData = await response.json()
         console.error("Erreur serveur :", errorData.detail)
-        isExecuting.value = false // On annule si le serveur plante
+        isExecuting.value = false
       }
     } catch (err) {
       console.error("Connexion impossible :", err)
       isExecuting.value = false
     }
-  }, 500) // Le délai magique qui sauve vos premiers callbacks !
+  }, 500)
 }
 </script>
 
