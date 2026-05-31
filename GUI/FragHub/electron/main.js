@@ -28,8 +28,6 @@ function startPythonServer() {
         exePath = path.join(__dirname, '../../../scripts/dist/FragHub_Backend/FragHub_Backend.exe');
     }
 
-    console.log("Tentative de lancement de l'exécutable :", exePath);
-
     if (!fs.existsSync(exePath)) {
         console.error("❌ ERREUR CRITIQUE : L'exécutable est introuvable :", exePath);
         return;
@@ -92,13 +90,8 @@ function createMainWindow() {
         }
     })
 
-    console.log("DEBUG: Chargement via app://-/index.html");
-
-    // 👇 ON CHARGE VIA LE NOUVEAU PROTOCOLE 👇
+    // Chargement via le protocole personnalisé
     mainWindow.loadURL('app://-/index.html');
-
-    // On laisse la console ouverte pour vérifier que tout est vert
-    mainWindow.webContents.openDevTools();
 
     mainWindow.once('ready-to-show', () => {
         mainWindow._nuxtReady = true
@@ -119,13 +112,11 @@ function waitForBackend() {
             const res = await fetch('http://127.0.0.1:8000/health')
             if (res.ok) {
                 clearInterval(poll)
-                console.log("✅ Backend prêt — chargement des bases de données")
                 setSplashMessage("Loading internal databases…")
 
                 try {
                     const initRes = await fetch('http://127.0.0.1:8000/init-data')
                     if (initRes.ok) {
-                        console.log("✅ Bases de données chargées")
                         mainWindow._backendReady = true
                         maybeShowMain()
                     } else {
@@ -133,7 +124,7 @@ function waitForBackend() {
                     }
                 } catch (err) {
                     setSplashMessage("Error loading databases. Please restart.")
-                    console.error(err)
+                    console.error("Erreur d'initialisation des bases de données:", err)
                 }
             }
         } catch {
@@ -170,7 +161,7 @@ function setSplashMessage(msg) {
 // ---------------------------------------------------------------
 app.whenReady().then(() => {
 
-    // 👇 INTERCEPTION DU PROTOCOLE POUR NUXT 👇
+    // Interception du protocole pour Nuxt
     protocol.handle('app', (request) => {
         let urlPath = request.url.slice(8); // Enlève "app://-/"
         urlPath = urlPath.split('?')[0].split('#')[0]; // Nettoie les paramètres éventuels
@@ -224,6 +215,5 @@ app.whenReady().then(() => {
 app.on('will-quit', () => {
     if (pythonProcess) {
         pythonProcess.kill()
-        console.log("Serveur Python arrêté.")
     }
 })
