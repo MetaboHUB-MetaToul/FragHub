@@ -7,20 +7,20 @@
 
         body {
             width: 600px;
-            height: 450px;
-            background: transparent; /* Suppression du fond blanc */
+            height: 750px;
+            background: transparent; /* Fenêtre globale transparente */
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            font-family: 'Segoe UI', Arial, sans-serif;
+            font-family: 'Segoe UI', sans-serif;
             overflow: hidden;
-            -webkit-app-region: drag; /* Draggable */
+            -webkit-app-region: drag;
             user-select: none;
         }
 
-        img {
-            width: 250px; /* Logo agrandi à 250px */
+        #logo {
+            width: 400px;
             margin-bottom: 40px;
             animation: pulse 2s infinite;
         }
@@ -31,38 +31,42 @@
             100% { opacity: 0.7; transform: scale(1); }
         }
 
+        /* La roue identique au v-progress-circular */
         .spinner {
-            width: 50px;
-            height: 50px;
-            border: 6px solid rgba(255, 255, 255, 0.3);
-            border-top-color: #1976D2;
+            width: 70px;
+            height: 70px;
+            border: 7px solid rgba(25, 118, 210, 0.2);
+            border-top: 7px solid #1976D2;
             border-radius: 50%;
             animation: spin 0.9s linear infinite;
-            margin-bottom: 20px;
         }
 
         @keyframes spin { to { transform: rotate(360deg); } }
 
+        /* Le fond blanc transparent sur le texte */
         #message {
-            font-size: 16px;
+            margin-top: 30px;
+            font-size: 20px;
             font-weight: 600;
-            color: #333;
-            letter-spacing: 0.5px;
-            background: rgba(255, 255, 255, 0.8);
-            padding: 5px 15px;
+            color: #424242;
+            padding: 10px 25px;
+            background: rgba(255, 255, 255, 0.7); /* Fond blanc transparent */
+            backdrop-filter: blur(5px);           /* Effet flou moderne */
             border-radius: 20px;
+            text-align: center;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
         }
     </style>
 </head>
 <body>
 <img id="logo" src="" alt="FragHub" />
 <div class="spinner"></div>
-<p id="message">Starting FragHub…</p>
+<div id="message">Starting FragHub…</div>
 
 <script>
-    window.electronAPI?.onSplashMessage?.((msg) => {
-        document.getElementById('message').textContent = msg
-    })
+    window.setSplashMessage = (msg) => {
+        document.getElementById('message').textContent = msg;
+    };
 </script>
 </body>
 </html>

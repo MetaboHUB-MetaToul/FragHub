@@ -41,17 +41,15 @@ function startPythonServer() {
 function createSplashWindow() {
     splashWindow = new BrowserWindow({
         width: 600,
-        height: 450,
-        frame: false,           // Pas de bordure
-        transparent: true,      // Active la transparence
-        backgroundColor: '#00000000', // Fond totalement transparent
+        height: 750, // Hauteur augmentée pour éviter la coupure
+        frame: false,
+        transparent: true,
+        backgroundColor: '#00000000',
         resizable: false,
         alwaysOnTop: true,
         center: true,
-        skipTaskbar: true,      // N'apparaît pas dans la barre des tâches
-        icon: path.join(__dirname, '../app/assets/FragHub_icon.png'),
+        skipTaskbar: true,
         webPreferences: {
-            preload: path.join(__dirname, 'preload.cjs'),
             nodeIntegration: false,
             contextIsolation: true
         }
