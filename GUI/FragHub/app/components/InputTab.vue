@@ -27,7 +27,11 @@
             class="mb-4"
             @click="browseFiles"
         >
-          <v-icon size="50" color="primary">mdi-file-document-multiple-outline</v-icon>
+          <v-icon
+              size="50"
+              :color="hasFiles ? 'success' : 'primary'"
+              :icon="hasFiles ? 'mdi-file-plus-outline' : 'mdi-file-document-multiple-outline'"
+          ></v-icon>
         </v-btn>
 
         <div class="text-subtitle-1 font-weight-bold text-center">
@@ -102,8 +106,6 @@ import { ref, computed } from 'vue'
 import { useState } from '#imports'
 
 const parameters = useState('parameters')
-
-// ON REMET LA RÉFÉRENCE POUR LE WEB
 const fileInput = ref(null)
 
 const hasFiles = computed(() => {
@@ -115,25 +117,20 @@ const fileNames = computed(() => {
   return parameters.value.input_directory.map(path => path.split(/[/\\]/).pop())
 })
 
-// === LOGIQUE HYBRIDE (ELECTRON + WEB) ===
 const browseFiles = async () => {
   if (window.electronAPI) {
-    // Si on est dans l'application Electron
     const selectedFiles = await window.electronAPI.selectFiles()
-
     if (selectedFiles && selectedFiles.length > 0) {
       if (!parameters.value.input_directory) parameters.value.input_directory = []
       parameters.value.input_directory = [...parameters.value.input_directory, ...selectedFiles]
     }
   } else {
-    // Si on est sur le navigateur Web (Fallback), on clique sur l'input caché
     if (fileInput.value) {
       fileInput.value.click()
     }
   }
 }
 
-// ON REMET LA FONCTION POUR GÉRER LA SÉLECTION WEB
 const handleFileChange = (event) => {
   const files = Array.from(event.target.files)
   if (files.length > 0) {
@@ -154,16 +151,14 @@ const clearAll = () => {
 </script>
 
 <style scoped>
-/* 1. L'animation de glissement du bouton (grâce aux espaceurs flex) */
 .transition-flex {
   transition: flex 0.7s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .button-zone {
-  z-index: 2; /* Garde le bouton au-dessus de l'animation d'ouverture */
+  z-index: 2;
 }
 
-/* 2. L'animation du volet qui s'ouvre (Tiroir) */
 .panel-container {
   flex-grow: 1;
   will-change: max-width, opacity, transform;
@@ -181,7 +176,7 @@ const clearAll = () => {
 .slide-panel-leave-to {
   max-width: 0;
   opacity: 0;
-  transform: translateX(-40px); /* Le volet sort de sous le bouton */
+  transform: translateX(-40px);
   margin-left: 0 !important;
 }
 
@@ -190,10 +185,9 @@ const clearAll = () => {
   max-width: 100%;
   opacity: 1;
   transform: translateX(0);
-  margin-left: 24px !important; /* L'équivalent de ml-6 */
+  margin-left: 24px !important;
 }
 
-/* 3. Animation de la liste des fichiers (ajout/suppression) */
 .list-anim-enter-active,
 .list-anim-leave-active {
   transition: all 0.4s ease;
@@ -201,10 +195,10 @@ const clearAll = () => {
 .list-anim-enter-from,
 .list-anim-leave-to {
   opacity: 0;
-  transform: translateX(20px); /* Les nouveaux fichiers arrivent par la droite */
+  transform: translateX(20px);
 }
 .list-anim-leave-active {
-  position: absolute; /* Empêche la liste de sauter pendant qu'un élément est supprimé */
+  position: absolute;
   width: 100%;
 }
 
