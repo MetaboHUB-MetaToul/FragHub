@@ -1,101 +1,114 @@
 <template>
-  <v-container class="h-100 d-flex flex-column pa-4 overflow-hidden" fluid>
-    <div class="text-center mb-4 flex-shrink-0">
-      <v-img src="~/assets/FragHub_icon.png" max-width="100" class="mx-auto"></v-img>
+  <v-container fluid class="pa-4 position-relative d-flex flex-column" style="height: 100vh; max-height: 100vh; overflow: hidden;">
+
+    <div class="background-logo-overlay">
+      <v-img src="~/assets/FragHub_icon.png" width="400" opacity="0.08"></v-img>
     </div>
-    <div class="d-flex flex-column flex-grow-1 overflow-hidden" style="gap: 16px;">
-      <v-card class="flex-grow-1 d-flex flex-column border overflow-hidden" elevation="2">
-        <v-tabs v-model="tabReport" bg-color="grey-lighten-3" density="compact" class="flex-shrink-0">
-          <v-tab value="report">Report</v-tab>
-        </v-tabs>
-        <v-card-text class="flex-grow-1 overflow-y-auto pa-2 bg-white" ref="reportContainer">
-          <div v-for="(log, i) in logs" :key="i" class="mb-1">
-            <div v-if="log.type === 'step'" class="text-center font-weight-bold text-subtitle-1 my-3">{{ log.text }}</div>
-            <div v-else-if="log.type === 'deletion'" class="text-center text-red font-weight-medium text-subtitle-1 my-1">{{ log.text }}</div>
-            <div v-else-if="log.type === 'completion'" class="text-center font-weight-bold text-h6 text-green my-3">{{ log.text }}</div>
-            <v-row v-else-if="log.type === 'progress_finished'" class="align-center px-2 py-1 mx-0" style="border-bottom: 1px solid #eee;">
-              <v-col cols="4" class="font-weight-bold text-caption pa-0">{{ log.prefix }}</v-col>
-              <v-col cols="4" class="pa-0 px-2">
-                <v-progress-linear
-                    :model-value="100"
-                    height="24"
-                    color="blue-darken-1"
-                    rounded
-                    class="mb-2"
-                    style="border: 1px solid #ccc;">
-                </v-progress-linear>
-              </v-col>
-              <v-col cols="4" class="text-right text-caption pa-0">{{ log.suffix }}</v-col>
-            </v-row>
+
+    <v-card class="w-100 d-flex flex-column border bg-transparent-card" elevation="2" style="z-index: 2; flex: 1 1 auto; min-height: 0;">
+
+      <v-tabs v-model="tabReport" bg-color="grey-lighten-4" density="compact" style="flex: 0 0 auto;">
+        <v-tab value="report" class="font-weight-bold">EXECUTION REPORT</v-tab>
+      </v-tabs>
+
+      <v-card-text class="pa-4 bg-white-transparent" ref="reportContainer" style="flex: 1 1 auto; overflow-y: auto; min-height: 0;">
+
+        <div v-for="(log, i) in logs" :key="i" class="mb-1">
+          <div v-if="log.type === 'step'" class="text-center font-weight-bold text-subtitle-1 my-4 text-blue-darken-3">
+            {{ log.text }}
           </div>
-        </v-card-text>
-      </v-card>
-      <v-card class="pa-0 flex-shrink-0 border" elevation="2">
-        <v-tabs v-model="tabProgress" bg-color="grey-lighten-3" density="compact">
-          <v-tab value="progress">Progress</v-tab>
-        </v-tabs>
-        <v-card-text class="pa-4 bg-white">
-          <div v-if="!isFinished">
-            <div class="text-subtitle-1 font-weight-medium mb-1">{{ currentPrefix }}</div>
-            <v-progress-linear v-model="progressPercent" height="24" color="blue-darken-1" rounded class="mb-2" :class="{ 'instant-reset': progressPercent === 0 }" style="border: 1px solid #ccc;"></v-progress-linear>
-            <div class="text-right text-subtitle-2 text-grey-darken-2">{{ suffixText }}</div>
+
+          <div v-else-if="log.type === 'deletion'" class="text-center text-red-darken-2 font-weight-medium text-subtitle-2 my-1">
+            {{ log.text }}
           </div>
-          <div v-else class="text-center">
-            <div class="text-h5 font-weight-bold my-4">{{ finalMessage }}</div>
+
+          <div v-else-if="log.type === 'completion'" class="text-center font-weight-bold text-h5 text-green-darken-2 my-6">
+            {{ log.text }}
           </div>
-        </v-card-text>
-      </v-card>
+
+          <v-row v-else-if="log.type === 'progress_finished'" class="align-center px-2 py-2 mx-0 finished-row">
+            <v-col cols="3" class="font-weight-bold text-caption pa-0">{{ log.prefix }}</v-col>
+            <v-col cols="5" class="pa-0 px-2">
+              <v-progress-linear :model-value="100" height="12" color="grey-darken-1" rounded></v-progress-linear>
+            </v-col>
+            <v-col cols="4" class="text-right text-caption pa-0 text-grey-darken-1">{{ log.suffix }}</v-col>
+          </v-row>
+        </div>
+
+        <div v-if="!isFinished" class="mt-4 pt-4 active-progress-zone">
+          <div class="text-subtitle-2 font-weight-bold mb-1 text-blue-darken-4">{{ currentPrefix }}</div>
+          <v-row class="align-center mx-0">
+            <v-col cols="8" class="pa-0">
+              <v-progress-linear
+                  v-model="progressPercent"
+                  height="20"
+                  color="blue-darken-2"
+                  rounded
+                  class="active-bar"
+              ></v-progress-linear>
+            </v-col>
+            <v-col cols="4" class="text-right pa-0 text-caption font-weight-bold">
+              {{ progressPercent.toFixed(2) }}%
+            </v-col>
+          </v-row>
+          <div class="text-right text-caption text-grey-darken-3 mt-1">{{ suffixText }}</div>
+        </div>
+
+        <div v-else class="text-center py-8">
+          <v-icon color="success" size="64" class="mb-4">mdi-check-circle</v-icon>
+          <div class="text-h4 font-weight-black text-green-darken-3">{{ finalMessage }}</div>
+        </div>
+
+      </v-card-text>
+    </v-card>
+
+    <div class="d-flex justify-center mt-4" style="z-index: 2; flex: 0 0 auto;">
+      <v-btn v-if="!isFinished" color="error" size="x-large" width="200" class="font-weight-bold" elevation="4" @click="stopProcess" :loading="isStopping">
+        {{ isStopping ? 'STOPPING...' : 'STOP PROCESS' }}
+      </v-btn>
+      <v-btn v-else color="success" size="x-large" width="200" class="font-weight-bold" elevation="4" @click="finishProcess">
+        CLOSE REPORT
+      </v-btn>
     </div>
-    <div class="d-flex justify-center mt-6 flex-shrink-0">
-      <v-btn v-if="!isFinished" color="error" size="x-large" width="150" class="font-weight-bold" @click="stopProcess" :loading="isStopping">{{ isStopping ? 'STOPPING...' : 'STOP' }}</v-btn>
-      <v-btn v-else color="success" size="x-large" width="150" class="font-weight-bold" @click="finishProcess">FINISH</v-btn>
-    </div>
+
   </v-container>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { io } from "socket.io-client"
 import { useState } from '#imports'
 
 const socket = io("http://127.0.0.1:8000")
 const isExecuting = useState('isExecuting')
 const tabReport = ref('report')
-const tabProgress = ref('progress')
 const reportContainer = ref(null)
 const logs = ref([])
-const currentPrefix = ref('Starting...')
+const currentPrefix = ref('Initializing...')
 const itemType = ref('items')
 const startTime = ref(Date.now())
 const isFinished = ref(false)
 const isStopping = ref(false)
 const finalMessage = ref('')
 
-// État de progression — directement appliqué, pas de lerp
 const progressValue = ref(0)
 const totalItems = ref(0)
 let taskFinishedLogged = false
-
-// Timer pour rafraîchir le texte elapsed/ETA (pas besoin de RAF)
 let timerHandle = null
 
-// ---------------------------------------------------------------
-// Calculs
-// ---------------------------------------------------------------
+// --- Calculs ---
 const progressPercent = computed(() => {
   if (totalItems.value <= 0) return 0
   return Math.min((progressValue.value / totalItems.value) * 100, 100)
 })
 
-function getSpeed() {
+const suffixText = computed(() => {
   const elapsed = (Date.now() - startTime.value) / 1000
-  return elapsed > 0 ? progressValue.value / elapsed : 0
-}
+  const speed = elapsed > 0 ? (progressValue.value / elapsed).toFixed(2) : 0
+  const eta = speed > 0 ? (totalItems.value - progressValue.value) / speed : 0
 
-function getETA() {
-  const speed = getSpeed()
-  return speed > 0 ? (totalItems.value - progressValue.value) / speed : 0
-}
+  return `${progressValue.value}/${totalItems.value} ${itemType.value} [${formatTime(elapsed)} < ${formatTime(eta)}, ${speed} ${itemType.value}/s]`
+})
 
 const formatTime = (s) => {
   if (!isFinite(s) || s < 0) return '00:00:00'
@@ -105,52 +118,34 @@ const formatTime = (s) => {
   return `${h}:${m}:${sec}`
 }
 
-// Tick réactif pour forcer la mise à jour du suffixe chaque seconde
-const tick = ref(0)
-const suffixText = computed(() => {
-  void tick.value // dépendance réactive au tick
-  const pct = progressPercent.value.toFixed(2)
-  const elapsed = (Date.now() - startTime.value) / 1000
-  const speed = getSpeed().toFixed(2)
-  const eta = getETA()
-  return `${pct}% | ${progressValue.value}/${totalItems.value} ${itemType.value} [${formatTime(elapsed)} < ${formatTime(eta)}, ${speed} ${itemType.value}/s]`
-})
-
-// ---------------------------------------------------------------
-// Utilitaires
-// ---------------------------------------------------------------
+// --- Auto-scroll quand les logs ou la progression changent ---
 const scrollToBottom = async () => {
   await nextTick()
   if (reportContainer.value) {
     const el = reportContainer.value.$el || reportContainer.value
-    el.scrollTop = el.scrollHeight
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
   }
 }
 
+// On surveille les logs et la valeur de progression pour scroller
+watch([logs, progressValue], () => {
+  scrollToBottom()
+}, { deep: true })
+
 function checkTaskFinished() {
-  if (
-      !taskFinishedLogged &&
-      totalItems.value > 0 &&
-      progressValue.value >= totalItems.value
-  ) {
+  if (!taskFinishedLogged && totalItems.value > 0 && progressValue.value >= totalItems.value) {
     taskFinishedLogged = true
     logs.value.push({
       type: 'progress_finished',
       prefix: currentPrefix.value,
       suffix: suffixText.value
     })
-    scrollToBottom()
   }
 }
 
-// ---------------------------------------------------------------
-// Événements Socket.IO
-// ---------------------------------------------------------------
 onMounted(() => {
   startTime.value = Date.now()
-
-  // Tick chaque seconde pour mettre à jour elapsed/ETA dans le texte
-  timerHandle = setInterval(() => { tick.value++ }, 1000)
+  timerHandle = setInterval(() => { /* force computed update */ }, 1000)
 
   socket.on('progress', (val) => {
     progressValue.value = val
@@ -158,15 +153,10 @@ onMounted(() => {
   })
 
   socket.on('total_items', (val) => {
-    // --- FILET DE SÉCURITÉ ---
-    // Si une tâche précédente tournait mais n'a pas été logguée (bloquée à 99%),
-    // on force sa complétion avant de réinitialiser la barre.
     if (totalItems.value > 0 && !taskFinishedLogged) {
       progressValue.value = totalItems.value
       checkTaskFinished()
     }
-    // -------------------------
-
     progressValue.value = 0
     totalItems.value = val
     startTime.value = Date.now()
@@ -175,24 +165,15 @@ onMounted(() => {
 
   socket.on('prefix', (val) => { currentPrefix.value = val })
   socket.on('item_type', (val) => { itemType.value = val })
-
-  socket.on('step', (val) => {
-    logs.value.push({ text: val, type: 'step' })
-    scrollToBottom()
-  })
-
-  socket.on('deletion', (val) => {
-    logs.value.push({ text: val, type: 'deletion' })
-    scrollToBottom()
-  })
+  socket.on('step', (val) => { logs.value.push({ text: val, type: 'step' }) })
+  socket.on('deletion', (val) => { logs.value.push({ text: val, type: 'deletion' }) })
 
   socket.on('completion', (val) => {
-    progressValue.value = totalItems.value  // barre à 100% instantané
+    progressValue.value = totalItems.value
     finalMessage.value = val
     logs.value.push({ text: val, type: 'completion' })
     isFinished.value = true
     isStopping.value = false
-    scrollToBottom()
   })
 })
 
@@ -210,10 +191,49 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.border { border: 1px solid #e0e0e0; }
+/* Fond avec logo transparent */
+.background-logo-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 0;
+  pointer-events: none;
+}
 
-/* On désactive la transition native pour un comportement instantané "façon PyQt" */
+.bg-transparent-card {
+  background-color: rgba(255, 255, 255, 0.6) !important;
+  backdrop-filter: blur(4px);
+}
+
+.bg-white-transparent {
+  background-color: rgba(255, 255, 255, 0.7) !important;
+}
+
+.finished-row {
+  border-bottom: 1px solid #eee;
+  background-color: rgba(0,0,0,0.02);
+}
+
+.active-progress-zone {
+  border-top: 2px solid #2196F3;
+  background-color: rgba(33, 150, 243, 0.05);
+  margin-top: 20px;
+  padding: 15px;
+  border-radius: 8px;
+}
+
+/* Comportement instantané (façon PyQt) */
 :deep(.v-progress-linear__determinate) {
   transition: none !important;
+}
+
+.active-bar {
+  border: 1px solid #1565C0;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.border {
+  border: 1px solid #d1d1d1 !important;
 }
 </style>

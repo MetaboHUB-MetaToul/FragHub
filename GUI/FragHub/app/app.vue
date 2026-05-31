@@ -195,23 +195,31 @@ onUnmounted(() => {
   if (checkInterval) clearInterval(checkInterval)
 })
 
+// --- DANS app.vue ---
 const startExecution = async () => {
-  try {
-    const response = await fetch('http://127.0.0.1:8000/run-analysis', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(parameters.value),
-    })
+  // 1. On affiche l'écran de chargement IMMÉDIATEMENT
+  // Cela permet à ProgressView.vue de se monter et au Socket de se connecter
+  isExecuting.value = true
 
-    if (response.ok) {
-      isExecuting.value = true
-    } else {
-      const errorData = await response.json()
-      console.error("Erreur serveur :", errorData.detail)
+  // 2. On attend 500ms pour être sûr à 100% que le frontend écoute
+  setTimeout(async () => {
+    try {
+      const response = await fetch('http://127.0.0.1:8000/run-analysis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(parameters.value),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        console.error("Erreur serveur :", errorData.detail)
+        isExecuting.value = false // On annule si le serveur plante
+      }
+    } catch (err) {
+      console.error("Connexion impossible :", err)
+      isExecuting.value = false
     }
-  } catch (err) {
-    console.error("Connexion impossible :", err)
-  }
+  }, 500) // Le délai magique qui sauve vos premiers callbacks !
 }
 </script>
 
