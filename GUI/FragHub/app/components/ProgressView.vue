@@ -16,7 +16,14 @@
             <v-row v-else-if="log.type === 'progress_finished'" class="align-center px-2 py-1 mx-0" style="border-bottom: 1px solid #eee;">
               <v-col cols="4" class="font-weight-bold text-caption pa-0">{{ log.prefix }}</v-col>
               <v-col cols="4" class="pa-0 px-2">
-                <v-progress-linear model-value="100" height="18" color="blue-darken-1" rounded class="border"></v-progress-linear>
+                <v-progress-linear
+                    :model-value="100"
+                    height="24"
+                    color="blue-darken-1"
+                    rounded
+                    class="mb-2"
+                    style="border: 1px solid #ccc;">
+                </v-progress-linear>
               </v-col>
               <v-col cols="4" class="text-right text-caption pa-0">{{ log.suffix }}</v-col>
             </v-row>
@@ -47,7 +54,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { io } from "socket.io-client"
 import { useState } from '#imports'
 
@@ -57,95 +64,156 @@ const tabReport = ref('report')
 const tabProgress = ref('progress')
 const reportContainer = ref(null)
 const logs = ref([])
-const progressValue = ref(0)
-const totalItems = ref(100)
 const currentPrefix = ref('Starting...')
 const itemType = ref('items')
 const startTime = ref(Date.now())
 const isFinished = ref(false)
 const isStopping = ref(false)
 const finalMessage = ref('')
-let hasReportedCurrentTask = false
-let timerInterval = null;
 
+// État de progression — directement appliqué, pas de lerp
+const progressValue = ref(0)
+const totalItems = ref(0)
+let taskFinishedLogged = false
+
+// Timer pour rafraîchir le texte elapsed/ETA (pas besoin de RAF)
+let timerHandle = null
+
+// ---------------------------------------------------------------
+// Calculs
+// ---------------------------------------------------------------
 const progressPercent = computed(() => {
-  if (totalItems.value <= 0) return 0;
-  return (progressValue.value / totalItems.value) * 100;
+  if (totalItems.value <= 0) return 0
+  return Math.min((progressValue.value / totalItems.value) * 100, 100)
 })
 
-const itemsPerSecond = computed(() => {
+function getSpeed() {
   const elapsed = (Date.now() - startTime.value) / 1000
   return elapsed > 0 ? progressValue.value / elapsed : 0
-})
-
-const estimatedTimeLeft = computed(() => {
-  const remaining = totalItems.value - progressValue.value
-  return itemsPerSecond.value > 0 ? remaining / itemsPerSecond.value : 0
-})
-
-const formatTime = (seconds) => {
-  if (!isFinite(seconds) || seconds < 0) return "00:00:00"
-  const h = Math.floor(seconds / 3600).toString().padStart(2, '0')
-  const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0')
-  const s = Math.floor(seconds % 60).toString().padStart(2, '0')
-  return `${h}:${m}:${s}`
 }
 
+function getETA() {
+  const speed = getSpeed()
+  return speed > 0 ? (totalItems.value - progressValue.value) / speed : 0
+}
+
+const formatTime = (s) => {
+  if (!isFinite(s) || s < 0) return '00:00:00'
+  const h = Math.floor(s / 3600).toString().padStart(2, '0')
+  const m = Math.floor((s % 3600) / 60).toString().padStart(2, '0')
+  const sec = Math.floor(s % 60).toString().padStart(2, '0')
+  return `${h}:${m}:${sec}`
+}
+
+// Tick réactif pour forcer la mise à jour du suffixe chaque seconde
+const tick = ref(0)
 const suffixText = computed(() => {
+  void tick.value // dépendance réactive au tick
   const pct = progressPercent.value.toFixed(2)
-  const prog = progressValue.value
-  const tot = totalItems.value
-  const it = itemType.value
   const elapsed = (Date.now() - startTime.value) / 1000
-  const speed = itemsPerSecond.value.toFixed(2)
-  const eta = estimatedTimeLeft.value
-  return `${pct}% | ${prog}/${tot} ${it} [${formatTime(elapsed)} < ${formatTime(eta)}, ${speed} ${it}/s]`
+  const speed = getSpeed().toFixed(2)
+  const eta = getETA()
+  return `${pct}% | ${progressValue.value}/${totalItems.value} ${itemType.value} [${formatTime(elapsed)} < ${formatTime(eta)}, ${speed} ${itemType.value}/s]`
 })
 
+// ---------------------------------------------------------------
+// Utilitaires
+// ---------------------------------------------------------------
 const scrollToBottom = async () => {
   await nextTick()
   if (reportContainer.value) {
-    const el = reportContainer.value.$el || reportContainer.value;
+    const el = reportContainer.value.$el || reportContainer.value
     el.scrollTop = el.scrollHeight
   }
 }
 
-watch(progressValue, (newVal) => {
-  if (newVal >= totalItems.value && totalItems.value > 0 && !hasReportedCurrentTask) {
-    logs.value.push({ type: 'progress_finished', prefix: currentPrefix.value, suffix: suffixText.value })
-    hasReportedCurrentTask = true
+function checkTaskFinished() {
+  if (
+      !taskFinishedLogged &&
+      totalItems.value > 0 &&
+      progressValue.value >= totalItems.value
+  ) {
+    taskFinishedLogged = true
+    logs.value.push({
+      type: 'progress_finished',
+      prefix: currentPrefix.value,
+      suffix: suffixText.value
+    })
     scrollToBottom()
   }
-})
+}
 
+// ---------------------------------------------------------------
+// Événements Socket.IO
+// ---------------------------------------------------------------
 onMounted(() => {
   startTime.value = Date.now()
-  timerInterval = setInterval(() => {
-    if (!isFinished.value && progressValue.value < totalItems.value) {
-      progressValue.value = progressValue.value
-    }
-  }, 1000);
 
-  socket.on('progress', (val) => { progressValue.value = val })
+  // Tick chaque seconde pour mettre à jour elapsed/ETA dans le texte
+  timerHandle = setInterval(() => { tick.value++ }, 1000)
+
+  socket.on('progress', (val) => {
+    progressValue.value = val
+    checkTaskFinished()
+  })
+
   socket.on('total_items', (val) => {
-    progressValue.value = 0 // FORCE RESET
+    // --- FILET DE SÉCURITÉ ---
+    // Si une tâche précédente tournait mais n'a pas été logguée (bloquée à 99%),
+    // on force sa complétion avant de réinitialiser la barre.
+    if (totalItems.value > 0 && !taskFinishedLogged) {
+      progressValue.value = totalItems.value
+      checkTaskFinished()
+    }
+    // -------------------------
+
+    progressValue.value = 0
     totalItems.value = val
     startTime.value = Date.now()
-    hasReportedCurrentTask = false // RESET FLAG
+    taskFinishedLogged = false
   })
+
   socket.on('prefix', (val) => { currentPrefix.value = val })
   socket.on('item_type', (val) => { itemType.value = val })
-  socket.on('step', (val) => { logs.value.push({ text: val, type: 'step' }); scrollToBottom() })
-  socket.on('deletion', (val) => { logs.value.push({ text: val, type: 'deletion' }); scrollToBottom() })
-  socket.on('completion', (val) => { finalMessage.value = val; logs.value.push({ text: val, type: 'completion' }); isFinished.value = true; isStopping.value = false; scrollToBottom() })
+
+  socket.on('step', (val) => {
+    logs.value.push({ text: val, type: 'step' })
+    scrollToBottom()
+  })
+
+  socket.on('deletion', (val) => {
+    logs.value.push({ text: val, type: 'deletion' })
+    scrollToBottom()
+  })
+
+  socket.on('completion', (val) => {
+    progressValue.value = totalItems.value  // barre à 100% instantané
+    finalMessage.value = val
+    logs.value.push({ text: val, type: 'completion' })
+    isFinished.value = true
+    isStopping.value = false
+    scrollToBottom()
+  })
 })
 
-const stopProcess = async () => { isStopping.value = true; await fetch('http://127.0.0.1:8000/stop-analysis') }
+const stopProcess = async () => {
+  isStopping.value = true
+  await fetch('http://127.0.0.1:8000/stop-analysis')
+}
+
 const finishProcess = () => { isExecuting.value = false }
-onUnmounted(() => { clearInterval(timerInterval); socket.disconnect() })
+
+onUnmounted(() => {
+  clearInterval(timerHandle)
+  socket.disconnect()
+})
 </script>
 
 <style scoped>
 .border { border: 1px solid #e0e0e0; }
-.instant-reset :deep(.v-progress-linear__determinate) { transition: none !important; }
+
+/* On désactive la transition native pour un comportement instantané "façon PyQt" */
+:deep(.v-progress-linear__determinate) {
+  transition: none !important;
+}
 </style>

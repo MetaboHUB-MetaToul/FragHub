@@ -15,7 +15,7 @@ import scripts.globals_vars as g_vars
 # Variables globales
 loop = None
 last_emit_time = 0
-EMIT_THROTTLE = 0.02  # 20ms pour une fluidité maximale
+EMIT_THROTTLE = 0.05  # 20ms pour une fluidité maximale
 
 # Configuration Socket.IO et FastAPI
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
@@ -62,8 +62,10 @@ class FragHubParams(BaseModel):
 def emit_to_frontend(event, data):
     global loop, last_emit_time
 
-    # Throttling pour progress et total_items
-    if event in ['progress', 'total_items']:
+    # Throttling UNIQUEMENT sur progress — tous les autres événements
+    # (total_items, prefix, step, completion, deletion…) passent toujours.
+    # Throttler total_items causait des resets perdus → barre qui saute à 100%.
+    if event == 'progress':
         current_time = time.time()
         if (current_time - last_emit_time) < EMIT_THROTTLE:
             return
@@ -76,18 +78,38 @@ def emit_to_frontend(event, data):
             pass
 
 # --- CALLBACKS ---
+current_total_items = 0  # <-- Nouvelle variable globale
+
 def progress_callback(*args):
-    if args: emit_to_frontend('progress', args[0])
+    global last_emit_time, current_total_items
+    if args:
+        # Si on atteint 100%, on remet le chrono à zéro pour FORCER l'envoi
+        if args[0] >= current_total_items:
+            last_emit_time = 0
+
+        emit_to_frontend('progress', args[0])
+
 def total_items_callback(*args):
-    if args: emit_to_frontend('total_items', args[0])
+    global last_emit_time, current_total_items
+    last_emit_time = 0
+    if args:
+        current_total_items = args[0]  # <-- On enregistre le maximum
+        emit_to_frontend('total_items', args[0])
+
 def prefix_callback(*args):
+    global last_emit_time
+    last_emit_time = 0
     if args: emit_to_frontend('prefix', args[0])
+
 def item_type_callback(*args):
     if args: emit_to_frontend('item_type', args[0])
+
 def step_callback(*args):
     if args: emit_to_frontend('step', args[0])
+
 def completion_callback(*args):
     if args: emit_to_frontend('completion', args[0])
+
 def deletion_callback(*args):
     if args: emit_to_frontend('deletion', args[0])
 
