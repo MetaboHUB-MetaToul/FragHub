@@ -1,8 +1,8 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, protocol, net } from 'electron'
 import fs from 'fs'
 import path from 'path'
 import { spawn } from 'child_process'
-import { fileURLToPath } from 'url'
+import { fileURLToPath, pathToFileURL } from 'url'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -11,28 +11,35 @@ let pythonProcess = null
 let splashWindow = null
 let mainWindow = null
 
+// --- ÉTAPE CRUCIALE : Enregistrement du protocole AVANT le lancement ---
+protocol.registerSchemesAsPrivileged([
+    { scheme: 'app', privileges: { secure: true, standard: true, supportFetchAPI: true, bypassCSP: true, corsEnabled: true } }
+])
+
 // ---------------------------------------------------------------
 // Backend Python
 // ---------------------------------------------------------------
 function startPythonServer() {
-    let exePath = ''
-    if (process.platform === 'win32') {
-        exePath = path.join(__dirname, '../../../scripts/dist/FragHub_Windows_1.4.2_x64/FragHub_Windows_1.4.2_x64.exe')
+    let exePath = '';
+
+    if (app.isPackaged) {
+        exePath = path.join(process.resourcesPath, 'bin', 'FragHub_Backend.exe');
     } else {
-        exePath = path.join(__dirname, '../../../scripts/dist/FragHub_Mac_1.4.2/FragHub_Mac_1.4.2')
+        exePath = path.join(__dirname, '../../../scripts/dist/FragHub_Backend/FragHub_Backend.exe');
     }
 
-    console.log("Tentative de lancement de l'exécutable :", exePath)
+    console.log("Tentative de lancement de l'exécutable :", exePath);
 
     if (!fs.existsSync(exePath)) {
-        console.error("❌ ERREUR CRITIQUE : L'exécutable est introuvable :", exePath)
-        return
+        console.error("❌ ERREUR CRITIQUE : L'exécutable est introuvable :", exePath);
+        return;
     }
 
-    pythonProcess = spawn(exePath, [], { stdio: 'inherit' })
+    pythonProcess = spawn(exePath, [], { stdio: 'inherit' });
+
     pythonProcess.on('error', (err) => {
-        console.error("❌ Erreur lancement FragHub:", err)
-    })
+        console.error("❌ Erreur lancement FragHub:", err);
+    });
 }
 
 // ---------------------------------------------------------------
@@ -41,7 +48,7 @@ function startPythonServer() {
 function createSplashWindow() {
     splashWindow = new BrowserWindow({
         width: 600,
-        height: 750, // Hauteur augmentée pour éviter la coupure
+        height: 750,
         frame: false,
         transparent: true,
         backgroundColor: '#00000000',
@@ -55,14 +62,16 @@ function createSplashWindow() {
         }
     })
 
-    splashWindow.loadFile(path.join(__dirname, 'splash.html'))
+    splashWindow.loadFile(path.join(__dirname, 'Splash.html'))
 
     splashWindow.webContents.on('did-finish-load', () => {
-        const iconPath = path.join(__dirname, '../app/assets/FragHub_icon.png')
-            .replace(/\\/g, '/')
+        const iconPath = path.join(__dirname, '../app/assets/FragHub_icon.png').replace(/\\/g, '/')
+
         splashWindow.webContents.executeJavaScript(
-            `document.getElementById('logo').src = 'file:///${iconPath}'`
-        )
+            `if (document.getElementById('logo')) { 
+            document.getElementById('logo').src = 'file:///${iconPath}' 
+         }`
+        ).catch(err => console.error("Erreur logo splash:", err))
     })
 }
 
@@ -74,36 +83,35 @@ function createMainWindow() {
         title: 'FragHub',
         width: 1280,
         height: 720,
-        minWidth: 960,
-        minHeight: 540,
-        backgroundColor: '#ffffff',
-        icon: path.join(__dirname, '../app/assets/FragHub_icon.png'),
-        autoHideMenuBar: true,
-        show: false,             // cachée jusqu'à ce que le splash soit terminé
+        show: false,
         webPreferences: {
             preload: path.join(__dirname, 'preload.cjs'),
             nodeIntegration: false,
-            contextIsolation: true
+            contextIsolation: true,
+            webSecurity: false
         }
     })
 
-    mainWindow.setAspectRatio(16 / 9)
-    mainWindow.loadURL('http://localhost:3000')
+    console.log("DEBUG: Chargement via app://-/index.html");
+
+    // 👇 ON CHARGE VIA LE NOUVEAU PROTOCOLE 👇
+    mainWindow.loadURL('app://-/index.html');
+
+    // On laisse la console ouverte pour vérifier que tout est vert
+    mainWindow.webContents.openDevTools();
 
     mainWindow.once('ready-to-show', () => {
-        // La page Nuxt est chargée, on peut déjà montrer la fenêtre
-        // si le backend est aussi prêt (géré dans waitForBackend)
         mainWindow._nuxtReady = true
         maybeShowMain()
     })
 }
 
 // ---------------------------------------------------------------
-// Polling backend : attend que /health réponde, puis charge /init-data
+// Polling backend
 // ---------------------------------------------------------------
 function waitForBackend() {
     let attempts = 0
-    const MAX_ATTEMPTS = 60  // 60 secondes max
+    const MAX_ATTEMPTS = 60
 
     const poll = setInterval(async () => {
         attempts++
@@ -129,7 +137,6 @@ function waitForBackend() {
                 }
             }
         } catch {
-            // Serveur pas encore démarré — normal au début
             if (attempts >= MAX_ATTEMPTS) {
                 clearInterval(poll)
                 setSplashMessage("Backend unreachable. Please restart.")
@@ -138,11 +145,9 @@ function waitForBackend() {
     }, 1000)
 }
 
-// Affiche la fenêtre principale seulement quand Nuxt ET le backend sont prêts
 function maybeShowMain() {
     if (!mainWindow?._nuxtReady || !mainWindow?._backendReady) return
 
-    // Transition propre : ferme le splash, montre le principal
     if (splashWindow && !splashWindow.isDestroyed()) {
         splashWindow.close()
         splashWindow = null
@@ -150,12 +155,13 @@ function maybeShowMain() {
     mainWindow.show()
 }
 
-// Envoie un message de statut au splash via executeJavaScript
 function setSplashMessage(msg) {
     if (splashWindow && !splashWindow.isDestroyed()) {
         splashWindow.webContents.executeJavaScript(
-            `document.getElementById('message').textContent = ${JSON.stringify(msg)}`
-        )
+            `if (document.getElementById('message')) { 
+                document.getElementById('message').textContent = ${JSON.stringify(msg)} 
+             }`
+        ).catch(err => console.error("Erreur message splash:", err))
     }
 }
 
@@ -163,6 +169,19 @@ function setSplashMessage(msg) {
 // Démarrage
 // ---------------------------------------------------------------
 app.whenReady().then(() => {
+
+    // 👇 INTERCEPTION DU PROTOCOLE POUR NUXT 👇
+    protocol.handle('app', (request) => {
+        let urlPath = request.url.slice(8); // Enlève "app://-/"
+        urlPath = urlPath.split('?')[0].split('#')[0]; // Nettoie les paramètres éventuels
+        const decodedPath = decodeURIComponent(urlPath);
+        const finalPath = decodedPath || 'index.html';
+
+        // Va chercher le fichier localement dans le dossier généré
+        const filePath = path.join(app.getAppPath(), '.output', 'public', finalPath);
+        return net.fetch(pathToFileURL(filePath).href);
+    });
+
     // 1. Splash.html immédiat
     createSplashWindow()
 

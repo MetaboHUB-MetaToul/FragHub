@@ -12,6 +12,18 @@ from scripts.MAIN import MAIN
 from scripts.backend_vars import parameters_dict
 import scripts.globals_vars as g_vars
 
+import sys
+import os
+
+# Redirection forcée de la sortie standard et d'erreur vers un fichier
+log_path = os.path.join(os.path.expanduser("~"), "fraghub_debug.txt")
+sys.stdout = open(log_path, 'w')
+sys.stderr = sys.stdout
+
+print(f"--- Démarrage de FragHub ---")
+print(f"CWD: {os.getcwd()}")
+print(f"sys.argv: {sys.argv}")
+
 # Variables globales
 loop = None
 last_emit_time = 0
