@@ -13,10 +13,9 @@
     "electron": "electron electron/main.js",
     "build:electron": "electron-builder"
   },
-  "dependencies": {},
   "devDependencies": {
     "darkreader": "^4.9.125",
-    "electron": "^42.3.0",
+    "electron": "^40.4.0",
     "electron-builder": "^25.1.8",
     "nuxt": "^4.4.6",
     "socket.io-client": "^4.8.3",
@@ -42,7 +41,9 @@
       {
         "from": "../../scripts/dist/FragHub_Backend/",
         "to": "bin",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "win": {

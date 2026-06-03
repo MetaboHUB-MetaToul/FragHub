@@ -22,15 +22,30 @@ protocol.registerSchemesAsPrivileged([
 function startPythonServer() {
     let exePath = '';
 
+    // 1. Détecter l'OS (win32 pour Windows, darwin pour Mac)
+    const isWindows = process.platform === 'win32';
+
+    // 2. Adapter le nom de l'exécutable
+    const backendName = isWindows ? 'FragHub_Backend.exe' : 'FragHub_Backend';
+
     if (app.isPackaged) {
-        exePath = path.join(process.resourcesPath, 'bin', 'FragHub_Backend.exe');
+        exePath = path.join(process.resourcesPath, 'bin', backendName);
     } else {
-        exePath = path.join(__dirname, '../../scripts/dist/FragHub_Backend/FragHub_Backend.exe');
+        exePath = path.join(__dirname, '../../scripts/dist/FragHub_Backend', backendName);
     }
 
     if (!fs.existsSync(exePath)) {
         console.error("❌ ERREUR CRITIQUE : L'exécutable est introuvable :", exePath);
         return;
+    }
+
+    // Sur Mac, il faut parfois forcer les permissions d'exécution
+    if (!isWindows) {
+        try {
+            fs.chmodSync(exePath, '755');
+        } catch (e) {
+            console.warn("Impossible de changer les droits de l'exécutable :", e);
+        }
     }
 
     pythonProcess = spawn(exePath, [], { stdio: 'inherit' });
@@ -63,7 +78,7 @@ function createSplashWindow() {
     splashWindow.loadFile(path.join(__dirname, 'Splash.html'))
 
     splashWindow.webContents.on('did-finish-load', () => {
-        const iconPath = path.join(__dirname, 'app/assets/FragHub_icon.png').replace(/\\/g, '/')
+        const iconPath = path.join(__dirname, '../app/assets/FragHub_icon.png').replace(/\\/g, '/')
 
         splashWindow.webContents.executeJavaScript(
             `if (document.getElementById('logo')) { 
@@ -170,7 +185,8 @@ app.whenReady().then(() => {
 
         // 👇 LA CORRECTION EST ICI 👇
         // En prod, la racine est app.getAppPath(). En dev, la racine est le dossier parent de main.js (..)
-        const basePath = app.isPackaged ? app.getAppPath() : __dirname;
+        // On remonte d'un dossier (..) pour sortir de "electron/" et trouver la racine du projet
+        const basePath = app.isPackaged ? app.getAppPath() : path.join(__dirname, '..');
 
         // Va chercher le fichier localement dans le dossier généré
         const filePath = path.join(basePath, '.output', 'public', finalPath);
