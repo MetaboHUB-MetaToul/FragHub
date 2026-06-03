@@ -49,6 +49,10 @@
     "win": {
       "target": "nsis",
       "icon": "app/assets/FragHub_icon.png"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "app/assets/FragHub_Python_icon.icns"
     }
   }
 }
