@@ -25,7 +25,7 @@ function startPythonServer() {
     if (app.isPackaged) {
         exePath = path.join(process.resourcesPath, 'bin', 'FragHub_Backend.exe');
     } else {
-        exePath = path.join(__dirname, '../../../scripts/dist/FragHub_Backend/FragHub_Backend.exe');
+        exePath = path.join(__dirname, '../../scripts/dist/FragHub_Backend/FragHub_Backend.exe');
     }
 
     if (!fs.existsSync(exePath)) {
@@ -63,7 +63,7 @@ function createSplashWindow() {
     splashWindow.loadFile(path.join(__dirname, 'Splash.html'))
 
     splashWindow.webContents.on('did-finish-load', () => {
-        const iconPath = path.join(__dirname, '../app/assets/FragHub_icon.png').replace(/\\/g, '/')
+        const iconPath = path.join(__dirname, 'app/assets/FragHub_icon.png').replace(/\\/g, '/')
 
         splashWindow.webContents.executeJavaScript(
             `if (document.getElementById('logo')) { 
@@ -170,7 +170,7 @@ app.whenReady().then(() => {
 
         // 👇 LA CORRECTION EST ICI 👇
         // En prod, la racine est app.getAppPath(). En dev, la racine est le dossier parent de main.js (..)
-        const basePath = app.isPackaged ? app.getAppPath() : path.join(__dirname, '..');
+        const basePath = app.isPackaged ? app.getAppPath() : __dirname;
 
         // Va chercher le fichier localement dans le dossier généré
         const filePath = path.join(basePath, '.output', 'public', finalPath);
