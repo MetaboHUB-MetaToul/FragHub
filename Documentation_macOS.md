@@ -59,7 +59,7 @@ Le cœur logique de l'application est développé en Python. Pour qu'Electron pu
 2. Exécutez la commande suivante (notez l'utilisation des deux-points `:` comme séparateur pour macOS) :
 
 ```bash
-pyinstaller --noconsole --icon=GUI/assets/MetaToul_Icon.icns --name=MetaToul_Lipido_Global_2.4.0 --add-data="../BATCH_FILES:BATCH_FILES" --add-data="../DB:DB" --add-data="GUI:GUI" --add-data="./mzmine_macOS_portable_4_8_0:mzmine_macOS_portable_4_8_0" --hidden-import=settings_window MetaToul_lipido_GLOBAL.py
+pyinstaller --noconfirm --onedir --noconsole --icon="GUI/assets/FragHub_Python_icon.icns" --name="FragHub_Backend" --add-data="../datas:datas" --add-data="GUI/assets:GUI/assets" --hidden-import=uvicorn.logging --hidden-import=uvicorn.loops --hidden-import=uvicorn.loops.auto --hidden-import=uvicorn.protocols.http.auto --hidden-import=uvicorn.protocols.websockets.auto FragHub.py
 ```
 
 > **📌 Notes importantes concernant le Backend :**
