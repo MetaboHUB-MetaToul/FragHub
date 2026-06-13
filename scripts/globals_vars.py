@@ -130,6 +130,10 @@ keys_dict = {}
 def load_internal_databases(step_callback=None):
     global ontologies_df, pubchem_datas, adduct_massdiff_dict_POS, adduct_massdiff_dict_NEG
     global adduct_dict_POS, adduct_dict_NEG, instrument_tree, keys_dict
+    
+    import time
+    start_time = time.time()
+    print("🚀 Démarrage du chargement de la base de données via RUST...", flush=True)
 
     # Sécurité : si c'est déjà chargé, on ne refait pas le travail
     if pubchem_datas is not None:
@@ -138,52 +142,46 @@ def load_internal_databases(step_callback=None):
     if step_callback:
         step_callback("-- LOADING INTERNAL DATABASES (PUBCHEM, ONTOLOGIES...) --")
 
-    # --- ONTOLOGIES ---
-    files = [f for f in os.listdir(ONTOLOGIES_PATH) if 'ontologies_dict' in f]
-    ontologies_df = pd.concat(
-        (pd.read_csv(os.path.join(ONTOLOGIES_PATH, f), sep=";", encoding="UTF-8") for f in files),
-        ignore_index=True
-    )
+    try:
+        import fraghub_rust
+    except ImportError:
+        print("❌ Extension Rust introuvable ! Veuillez la compiler avec maturin.", flush=True)
+        return
 
-    # --- PUBCHEM (MULTITHREADING CONSERVÉ) ---
-    folder_path = PUBCHEM_PATH
-    all_dfs = []
+    # --- ONTOLOGIES (RUST) ---
+    print("⏳ Chargement des ontologies...", flush=True)
+    ontologies_dict_rust = fraghub_rust.load_ontologies_datas(ONTOLOGIES_PATH)
+    ontologies_df = pd.DataFrame(ontologies_dict_rust)
 
-    def read_csv(file_path):
-        return pd.read_csv(file_path, sep=';', quotechar='"', encoding='utf-8')
+    # --- PUBCHEM (RUST) ---
+    print("⏳ Chargement de PubChem...", flush=True)
+    pubchem_dict_rust = fraghub_rust.load_pubchem_datas(PUBCHEM_PATH)
+    pubchem_datas = pd.DataFrame(pubchem_dict_rust)
+    # RUST reads everything as string, convert numerical columns back to floats
+    if 'EXACTMASS' in pubchem_datas.columns:
+        pubchem_datas['EXACTMASS'] = pd.to_numeric(pubchem_datas['EXACTMASS'], errors='coerce')
+    if 'AVERAGEMASS' in pubchem_datas.columns:
+        pubchem_datas['AVERAGEMASS'] = pd.to_numeric(pubchem_datas['AVERAGEMASS'], errors='coerce')
 
-    with ThreadPoolExecutor() as executor:
-        futures = []
-        for file_name in os.listdir(folder_path):
-            if file_name.endswith('.csv'):
-                file_path = os.path.join(folder_path, file_name)
-                futures.append(executor.submit(read_csv, file_path))
-        for future in futures:
-            all_dfs.append(future.result())
+    # --- ADDUCTS (RUST) ---
+    print("⏳ Chargement des Adducts, Instrument Tree et Keys...", flush=True)
+    adduct_file_path = os.path.abspath(os.path.join(ADDUCT_PATH, "adduct_to_convert.csv"))
+    res_pos, res_massdiff_pos, res_neg, res_massdiff_neg = fraghub_rust.load_adducts(adduct_file_path)
+    adduct_dict_POS = res_pos
+    adduct_massdiff_dict_POS = res_massdiff_pos
+    adduct_dict_NEG = res_neg
+    adduct_massdiff_dict_NEG = res_massdiff_neg
 
-    pubchem_datas = pd.concat(all_dfs, ignore_index=True)
-    del all_dfs
+    # --- INSTRUMENT TREE (RUST) ---
+    instrument_tree_path = os.path.join(INSTRUMENT_TREE_PATH, 'instruments_tree.json')
+    instrument_tree = fraghub_rust.load_instrument_tree(instrument_tree_path)
 
-    # --- ADDUCTS ---
-    adduct_dataframe = pd.read_csv(os.path.abspath(os.path.join(ADDUCT_PATH, "adduct_to_convert.csv")), sep=";", encoding="UTF-8")
-    adduct_dataframe_POS = adduct_dataframe[adduct_dataframe['ionmode'] == "positive"]
-    adduct_dataframe_NEG = adduct_dataframe[adduct_dataframe['ionmode'] == "negative"]
-
-    adduct_dict_POS = dict(zip(adduct_dataframe_POS['known_adduct'], adduct_dataframe_POS['fraghub_default']))
-    adduct_massdiff_dict_POS = dict(zip(adduct_dataframe_POS['fraghub_default'], adduct_dataframe_POS['massdiff']))
-
-    adduct_dict_NEG = dict(zip(adduct_dataframe_NEG['known_adduct'], adduct_dataframe_NEG['fraghub_default']))
-    adduct_massdiff_dict_NEG = dict(zip(adduct_dataframe_NEG['fraghub_default'], adduct_dataframe_NEG['massdiff']))
-    del adduct_dataframe
-
-    # --- INSTRUMENT TREE ---
-    with open(os.path.join(INSTRUMENT_TREE_PATH,'instruments_tree.json'), 'r') as f:
-        instrument_tree = json.load(f)
-
-    # --- KEYS ---
-    Key_dataframe = pd.read_csv(os.path.abspath(os.path.join(KEYS_PATH,"key_to_convert.csv")),sep=";", encoding="UTF-8")
-    keys_dict = dict(zip(Key_dataframe['known_synonym'], Key_dataframe['fraghub_default'].str.upper()))
-    del Key_dataframe
+    # --- KEYS (RUST) ---
+    keys_file_path = os.path.abspath(os.path.join(KEYS_PATH, "key_to_convert.csv"))
+    keys_dict = fraghub_rust.load_keys(keys_file_path)
+    
+    elapsed = time.time() - start_time
+    print(f"✅ Chargement terminé avec succès en {elapsed:.2f} secondes !", flush=True)
 
 # ======================================================================================================================
 

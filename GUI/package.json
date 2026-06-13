@@ -39,7 +39,7 @@
     ],
     "extraResources": [
       {
-        "from": "../../scripts/dist/FragHub_Backend/",
+        "from": "../scripts/dist/FragHub_Backend/",
         "to": "bin",
         "filter": [
           "**/*"
