@@ -15,13 +15,11 @@ import scripts.globals_vars as g_vars
 import sys
 import os
 
-DEBUG = True  # Mets sur False quand tu veux relancer la redirection vers le fichier
+# Redirection forcée de la sortie standard et d'erreur vers un fichier
+log_path = os.path.join(os.path.expanduser("~"), "fraghub_debug.txt")
+sys.stdout = open(log_path, 'w')
+sys.stderr = sys.stdout
 
-if not DEBUG:
-    # Redirection forcée de la sortie standard et d'erreur vers un fichier
-    log_path = os.path.join(os.path.expanduser("~"), "fraghub_debug.txt")
-    sys.stdout = open(log_path, 'w')
-    sys.stderr = sys.stdout
 print(f"--- Démarrage de FragHub ---")
 print(f"CWD: {os.getcwd()}")
 print(f"sys.argv: {sys.argv}")
