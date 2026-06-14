@@ -6,7 +6,10 @@ pub mod loading_db;
 pub mod convertors;
 pub mod splash_generator;
 pub mod duplicatas_remover;
-pub mod update_checker; // <-- Rendu public !
+pub mod update_checker;
+pub mod normalizer;       // <-- AJOUTÉ
+pub mod peaks_filters;    // <-- AJOUTÉ
+pub mod spectrum_cleaning;// <-- AJOUTÉ
 
 #[pymodule]
 fn fraghub_rust(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -28,12 +31,11 @@ fn fraghub_rust(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(convertors::mgf_to_dict::mgf_to_dict_processing, m)?)?;
     m.add_function(wrap_pyfunction!(convertors::msp_to_dict::msp_to_dict_processing, m)?)?;
 
-    // --- Partie 3 : Traitements de masse (SPLASH, Doublons, Updates) ---
+    // --- Partie 3 : Traitements de masse ---
     m.add_function(wrap_pyfunction!(splash_generator::generate_splash_processing, m)?)?;
     m.add_function(wrap_pyfunction!(duplicatas_remover::remove_duplicatas_processing, m)?)?;
-
-    // 👇 LA LIGNE MANQUANTE ÉTAIT ICI ! 👇
-    m.add_function(wrap_pyfunction!(update_checker::check_for_update_processing, m)?)?;
+    m.add_function(wrap_pyfunction!(update_checker::check_for_update_processing, m)?)?; // <-- AJOUTÉ
+    m.add_function(wrap_pyfunction!(spectrum_cleaning::spectrum_cleaning_processing, m)?)?; // <-- AJOUTÉ
 
     Ok(())
 }
