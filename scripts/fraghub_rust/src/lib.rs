@@ -6,7 +6,7 @@ pub mod loading_db;
 pub mod convertors;
 pub mod splash_generator;
 pub mod duplicatas_remover;
-// Ajout du module splash
+pub mod update_checker; // <-- Rendu public !
 
 #[pymodule]
 fn fraghub_rust(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -28,11 +28,12 @@ fn fraghub_rust(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(convertors::mgf_to_dict::mgf_to_dict_processing, m)?)?;
     m.add_function(wrap_pyfunction!(convertors::msp_to_dict::msp_to_dict_processing, m)?)?;
 
-    // --- Partie 3 : Générateur de SPLASH ---
+    // --- Partie 3 : Traitements de masse (SPLASH, Doublons, Updates) ---
     m.add_function(wrap_pyfunction!(splash_generator::generate_splash_processing, m)?)?;
-
-    // Ajoutez ceci dans #[pymodule]
     m.add_function(wrap_pyfunction!(duplicatas_remover::remove_duplicatas_processing, m)?)?;
+
+    // 👇 LA LIGNE MANQUANTE ÉTAIT ICI ! 👇
+    m.add_function(wrap_pyfunction!(update_checker::check_for_update_processing, m)?)?;
 
     Ok(())
 }
