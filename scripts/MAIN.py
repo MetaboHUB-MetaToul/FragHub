@@ -19,6 +19,7 @@ import traceback
 import time
 import sys
 import os
+import gc # Ajout du Garbage Collector
 
 
 class InterruptedError(Exception):
@@ -116,20 +117,51 @@ def MAIN(progress_callback=None, total_items_callback=None, prefix_callback=None
                                                                          item_type_callback=item_type_callback)
         check_stop_flag()
 
+        # --- DÉBUT DE L'OPTIMISATION MÉMOIRE ET RESPIRATION UI ---
+
+        # 1. On lâche le GIL 100ms pour que Socket.IO envoie le signal "100% terminé" de la tâche précédente à Vue.js
+        time.sleep(0.1)
+
+        # 2. On simule un chargement avec un total de 1 pour que Vue.js affiche la barre sans bugger
+        if total_items_callback: total_items_callback(1)
+        if prefix_callback: prefix_callback("Compiling and transferring data to DataFrame (Please wait)...")
+        if progress_callback: progress_callback(0)
+
+        # 3. Nouvelle pause de 100ms pour que ce message parte BIEN avant le blocage de Pandas
+        time.sleep(0.1)
+
         spectrum_list = []
-        spectrum_list.extend(FINAL_MSP)
-        del FINAL_MSP
-        spectrum_list.extend(FINAL_CSV)
-        del FINAL_CSV
-        spectrum_list.extend(FINAL_JSON)
-        del FINAL_JSON
-        spectrum_list.extend(FINAL_MGF)
-        del FINAL_MGF
+
+        # Transfert destructif via extend (rapide) + del (libère la RAM)
+        if FINAL_MSP:
+            spectrum_list.extend(FINAL_MSP)
+            del FINAL_MSP
+
+        if FINAL_CSV:
+            spectrum_list.extend(FINAL_CSV)
+            del FINAL_CSV
+
+        if FINAL_JSON:
+            spectrum_list.extend(FINAL_JSON)
+            del FINAL_JSON
+
+        if FINAL_MGF:
+            spectrum_list.extend(FINAL_MGF)
+            del FINAL_MGF
+
+        # On force la libération de la mémoire morte avant l'allocation massive
+        gc.collect()
 
         # STEP 3: removing duplicatas
-        spectrum_list = pd.DataFrame(spectrum_list)[ordered_columns]
+        # Création du DataFrame (C'est ici que Python fige, mais le front est déjà au courant !)
+        spectrum_list = pd.DataFrame(spectrum_list, columns=ordered_columns)
         spectrum_list = spectrum_list.astype({col: str for col in ordered_columns if col != 'PEAKS_LIST'})
+        # --- FIN DE L'OPTIMISATION ---
+
+        # On valide la petite étape artificielle
+        if progress_callback: progress_callback(1)
         time.sleep(0.01)
+
         if step_callback:
             step_callback("-- REMOVING DUPLICATAS --")
         time.sleep(0.01)
@@ -148,15 +180,15 @@ def MAIN(progress_callback=None, total_items_callback=None, prefix_callback=None
             step_callback("-- CHECKING FOR UPDATES --")
         time.sleep(0.01)
         spectrum_list, update_temp = check_for_update_processing(spectrum_list, output_directory,
-                                                                                 progress_callback=progress_callback,
-                                                                                 total_items_callback=total_items_callback,
-                                                                                 prefix_callback=prefix_callback,
-                                                                                 item_type_callback=item_type_callback)
+                                                                 progress_callback=progress_callback,
+                                                                 total_items_callback=total_items_callback,
+                                                                 prefix_callback=prefix_callback,
+                                                                 item_type_callback=item_type_callback)
         deletion_callback(f"previously cleaned: {scripts.deletion_report.previously_cleaned}")
 
         check_stop_flag()
 
-        if spectrum_list:
+        if spectrum_list is not None and not spectrum_list.empty:
 
             if update_temp:
                 update = True
@@ -189,7 +221,7 @@ def MAIN(progress_callback=None, total_items_callback=None, prefix_callback=None
 
             check_stop_flag()
 
-            if not spectrum_list:
+            if spectrum_list is None or spectrum_list.empty:
                 deletion_callback("-- THERE IS NO SPECTRUMS TO PROCESS AFTER CLEANING, EXITING PROCESS --")
                 time.sleep(0.01)
                 if completion_callback:
@@ -197,7 +229,7 @@ def MAIN(progress_callback=None, total_items_callback=None, prefix_callback=None
                         "--- TOTAL TIME: %s ---" % time.strftime("%H:%M:%S", time.gmtime(time.time() - start_time)))
                 return 0
 
-            spectrum_list = pd.DataFrame(spectrum_list)[ordered_columns].astype(str)
+            spectrum_list = pd.DataFrame(spectrum_list, columns=ordered_columns).astype(str)
 
             # STEP 5: mols derivations and calculations
             time.sleep(0.01)
@@ -246,9 +278,9 @@ def MAIN(progress_callback=None, total_items_callback=None, prefix_callback=None
                     step_callback("-- DE NOVO CALCULATIONS --")
                 time.sleep(0.01)
                 spectrum_list = de_novo_calculation(spectrum_list, progress_callback=progress_callback,
-                                                      total_items_callback=total_items_callback,
-                                                      prefix_callback=prefix_callback,
-                                                      item_type_callback=item_type_callback)
+                                                    total_items_callback=total_items_callback,
+                                                    prefix_callback=prefix_callback,
+                                                    item_type_callback=item_type_callback)
 
                 check_stop_flag()
 

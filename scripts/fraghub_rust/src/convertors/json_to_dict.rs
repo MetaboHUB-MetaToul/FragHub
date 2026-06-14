@@ -1,138 +1,68 @@
 // src/convertors/json_to_dict.rs
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList};
-use regex::Regex;
-use std::collections::HashMap;
+use pyo3::types::{PyDict, PyList, PyString, PyAny};
+use rayon::prelude::*;
+use std::collections::{HashMap, HashSet};
+use std::time::Duration;
 
-fn parse_json_peak_list(py: Python, peak_list_string: &str) -> PyResult<PyObject> {
+use super::loaders::RawJsonSpectra;
+
+struct ParsedJsonSpectrum {
+    metadata: HashMap<String, String>,
+    peaks: Vec<(f64, f64)>,
+}
+
+fn parse_json_peak_list_rust(peak_list_string: &str) -> Vec<(f64, f64)> {
+    let bytes = peak_list_string.as_bytes();
+    let mut numbers = Vec::with_capacity(1024);
+    let mut start = None;
+
+    for (i, &b) in bytes.iter().enumerate() {
+        let is_num_char = b.is_ascii_digit() || b == b'.' || b == b'-' || b == b'e' || b == b'E' || b == b'+';
+        if is_num_char {
+            if start.is_none() { start = Some(i); }
+        } else if let Some(s) = start {
+            if let Ok(s_val) = std::str::from_utf8(&bytes[s..i]) {
+                if let Ok(num) = s_val.parse::<f64>() { numbers.push(num); }
+            }
+            start = None;
+        }
+    }
+    if let Some(s) = start {
+        if let Ok(s_val) = std::str::from_utf8(&bytes[s..]) {
+            if let Ok(num) = s_val.parse::<f64>() { numbers.push(num); }
+        }
+    }
+
+    let mut peaks = Vec::with_capacity(numbers.len() / 2);
+    for chunk in numbers.chunks_exact(2) {
+        peaks.push((chunk[0], chunk[1]));
+    }
+    peaks
+}
+
+fn parse_json_peak_array(val: &serde_json::Value) -> Vec<(f64, f64)> {
     let mut peaks = Vec::new();
-    for cap in crate::globals_vars::PEAK_LIST_JSON_PATTERN.captures_iter(peak_list_string) {
-        let mz = cap[1].replace(",", ".").parse::<f64>().unwrap_or(0.0);
-        let int = cap[2].replace(",", ".").parse::<f64>().unwrap_or(0.0);
-        peaks.push(vec![mz, int]);
-    }
-    Ok(PyList::new_bound(py, peaks).into())
-}
-
-fn parsing_mona_json<'py>(py: Python<'py>, json_dict: &Bound<'py, PyDict>) -> PyResult<Bound<'py, PyDict>> {
-    let dict_final = PyDict::new_bound(py);
-
-    // Compound name
-    if let Ok(Some(compound)) = json_dict.get_item("compound") {
-        if let Ok(comp_list) = compound.downcast::<PyList>() {
-            if comp_list.len() > 0 {
-                if let Ok(comp_0) = comp_list.get_item(0)?.downcast::<PyDict>() {
-                    if let Ok(Some(names)) = comp_0.get_item("names") {
-                        if let Ok(names_list) = names.downcast::<PyList>() {
-                            if names_list.len() > 0 {
-                                if let Ok(names_0) = names_list.get_item(0)?.downcast::<PyDict>() {
-                                    if let Ok(Some(name_val)) = names_0.get_item("name") {
-                                        dict_final.set_item("compound_name", name_val)?;
-                                    }
-                                }
-                            }
-                        }
-                    }
+    if let Some(arr) = val.as_array() {
+        peaks.reserve(arr.len());
+        for item in arr {
+            if let Some(pair) = item.as_array() {
+                if pair.len() >= 2 {
+                    let mz = pair[0].as_f64().unwrap_or(0.0);
+                    let int = pair[1].as_f64().unwrap_or(0.0);
+                    peaks.push((mz, int));
                 }
             }
         }
     }
-    if !dict_final.contains("compound_name")? { dict_final.set_item("compound_name", "")?; }
-
-    // Compound MetaData (smiles, inchi...)
-    if let Ok(Some(compound)) = json_dict.get_item("compound") {
-        if let Ok(comp_list) = compound.downcast::<PyList>() {
-            if comp_list.len() > 0 {
-                if let Ok(comp_0) = comp_list.get_item(0)?.downcast::<PyDict>() {
-                    if let Ok(Some(meta)) = comp_0.get_item("metaData") {
-                        if let Ok(meta_list) = meta.downcast::<PyList>() {
-                            for i in 0..meta_list.len() {
-                                if let Ok(item) = meta_list.get_item(i)?.downcast::<PyDict>() {
-                                    if let (Ok(Some(name)), Ok(Some(computed))) = (item.get_item("name"), item.get_item("computed")) {
-                                        let name_str = name.extract::<String>().unwrap_or_default().to_lowercase();
-                                        let is_computed = computed.extract::<bool>().unwrap_or(false);
-                                        if !is_computed && ["molecular formula", "smiles", "inchi", "inchikey"].contains(&name_str.as_str()) {
-                                            if let Ok(Some(val)) = item.get_item("value") { dict_final.set_item(name_str, val)?; }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // ID, global MetaData, filename...
-    if let Ok(Some(id_val)) = json_dict.get_item("id") { dict_final.set_item("spectrum_id", id_val)?; }
-    if let Ok(Some(f_val)) = json_dict.get_item("filename") { dict_final.set_item("filename", f_val)?; }
-
-    if let Ok(Some(meta)) = json_dict.get_item("metaData") {
-        if let Ok(meta_list) = meta.downcast::<PyList>() {
-            for i in 0..meta_list.len() {
-                if let Ok(item) = meta_list.get_item(i)?.downcast::<PyDict>() {
-                    if let Ok(Some(name)) = item.get_item("name") {
-                        let name_str = name.extract::<String>().unwrap_or_default().to_lowercase();
-                        if ["instrument", "instrument type", "ms level", "ionization", "retention time", "ionization mode", "precursor type", "collision energy", "precursor m/z"].contains(&name_str.as_str()) {
-                            if let Ok(Some(val)) = item.get_item("value") { dict_final.set_item(name_str, val)?; }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Spectrum (peaks)
-    if let Ok(Some(spec_val)) = json_dict.get_item("spectrum") {
-        if let Ok(spec_str) = spec_val.extract::<String>() {
-            if let Ok(peaks) = parse_json_peak_list(py, &spec_str) { dict_final.set_item("peaks", peaks)?; }
-        }
-    }
-
-    // Predicted
-    dict_final.set_item("predicted", "false")?;
-    if let Ok(Some(tags)) = json_dict.get_item("tags") {
-        if let Ok(tags_list) = tags.downcast::<PyList>() {
-            for i in 0..tags_list.len() {
-                if let Ok(tag_dict) = tags_list.get_item(i)?.downcast::<PyDict>() {
-                    if let Ok(Some(text)) = tag_dict.get_item("text") {
-                        if text.extract::<String>().unwrap_or_default() == "In-Silico" {
-                            dict_final.set_item("predicted", "true")?;
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(dict_final)
-}
-
-fn convert_dict_keys<'py>(py: Python<'py>, dict: &Bound<'py, PyDict>, keys_dict: &HashMap<String, String>, keys_list: &Vec<String>) -> PyResult<Bound<'py, PyDict>> {
-    let new_dict = PyDict::new_bound(py);
-    for (k, v) in dict.iter() {
-        if let Ok(k_str) = k.extract::<String>() {
-            let lower_k = k_str.to_lowercase();
-            if let Some(mapped_key) = keys_dict.get(&lower_k) {
-                if keys_list.contains(mapped_key) {
-                    new_dict.set_item(mapped_key, v)?;
-                }
-            }
-        }
-    }
-    for key in keys_list {
-        if !new_dict.contains(key)? { new_dict.set_item(key, "")?; }
-    }
-    Ok(new_dict)
+    peaks
 }
 
 #[pyfunction]
-#[pyo3(signature = (final_json, keys_dict, keys_list, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None))]
+#[pyo3(signature = (final_json_obj, keys_dict, keys_list, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None))]
 pub fn json_to_dict_processing<'py>(
     py: Python<'py>,
-    final_json: Bound<'py, PyList>,
+    final_json_obj: &Bound<'py, PyAny>,
     keys_dict: HashMap<String, String>,
     keys_list: Vec<String>,
     progress_callback: Option<PyObject>,
@@ -140,48 +70,184 @@ pub fn json_to_dict_processing<'py>(
     prefix_callback: Option<PyObject>,
     item_type_callback: Option<PyObject>,
 ) -> PyResult<Bound<'py, PyList>> {
-    let total = final_json.len();
-    if let Some(cb) = &total_items_callback { cb.call1(py, (total, 0))?; }
-    if let Some(cb) = &prefix_callback { cb.call1(py, ("Parsing JSON spectrums:",))?; }
-    if let Some(cb) = &item_type_callback { cb.call1(py, ("spectra",))?; }
+
+    let mut rust_strings: Vec<String> = Vec::new();
+
+    if let Ok(mut raw) = final_json_obj.extract::<PyRefMut<'_, RawJsonSpectra>>() {
+        rust_strings = std::mem::take(&mut raw.data);
+    }
+    else if let Ok(py_list) = final_json_obj.downcast::<PyList>() {
+        for item in py_list {
+            if let Ok(s) = item.extract::<String>() { rust_strings.push(s); }
+        }
+    }
+
+    let total = rust_strings.len();
+    if let Some(cb) = &total_items_callback { let _ = cb.call1(py, (total, 0)); }
+    if let Some(cb) = &prefix_callback { let _ = cb.call1(py, ("Parsing JSON spectrums:",)); }
+    if let Some(cb) = &item_type_callback { let _ = cb.call1(py, ("spectra",)); }
+
+    let result_list = PyList::empty_bound(py);
+    let keys_set: HashSet<&str> = keys_list.iter().map(|s| s.as_str()).collect();
+
+    // --- BOUCLIER RAM 1 : Mise en cache des 60 millions de clés ---
+    let mut interned_keys: HashMap<String, Bound<'py, PyString>> = HashMap::new();
+    for mapped in keys_dict.values() {
+        if keys_set.contains(mapped.as_str()) {
+            interned_keys.insert(mapped.clone(), PyString::intern_bound(py, mapped));
+        }
+    }
+    let peaks_list_key = PyString::intern_bound(py, "PEAKS_LIST");
+
+    let mut interned_keys_list = Vec::new();
+    for key in &keys_list {
+        interned_keys_list.push(PyString::intern_bound(py, key));
+    }
 
     let mut processed = 0;
-    let result_list = PyList::empty_bound(py);
+    let chunk_size = 2000;
 
-    let keys_to_check = vec!["compound", "id", "metaData", "spectrum", "filename"];
-    let peak_list_keys = vec!["spectrum", "peaks_json", "peaks"];
+    // --- BOUCLIER RAM 2 : Destruction des chaînes au vol ---
+    rust_strings.reverse(); // On inverse pour utiliser pop() en 0 allocation
 
-    for i in 0..total {
-        if let Ok(json_dict) = final_json.get_item(i)?.downcast_into::<PyDict>() {
-            let has_all_keys = keys_to_check.iter().all(|&k| json_dict.contains(k).unwrap_or(false));
+    while !rust_strings.is_empty() {
+        let mut chunk = Vec::with_capacity(chunk_size);
+        for _ in 0..chunk_size {
+            if let Some(s) = rust_strings.pop() { chunk.push(s); }
+            else { break; }
+        }
+        let current_chunk_len = chunk.len();
 
-            if has_all_keys {
-                if let Ok(parsed_mona) = parsing_mona_json(py, &json_dict) {
-                    let final_dict = convert_dict_keys(py, &parsed_mona, &keys_dict, &keys_list)?;
-                    result_list.append(final_dict)?;
-                }
-            } else {
-                let mut matched = false;
-                for key in &peak_list_keys {
-                    if json_dict.contains(key).unwrap_or(false) {
-                        if let Ok(Some(val)) = json_dict.get_item(key) {
-                            if let Ok(val_str) = val.extract::<String>() {
-                                if let Ok(peaks) = parse_json_peak_list(py, &val_str) {
-                                    json_dict.set_item(key, peaks)?;
-                                    let final_dict = convert_dict_keys(py, &json_dict, &keys_dict, &keys_list)?;
-                                    result_list.append(final_dict)?;
-                                    matched = true;
-                                    break;
+        let parsed_chunk: Vec<ParsedJsonSpectrum> = py.allow_threads(|| {
+            // into_par_iter() détruit et libère la RAM à chaque ligne lue !
+            chunk.into_par_iter().filter_map(|json_str| {
+                let v: serde_json::Value = serde_json::from_str(&json_str).ok()?;
+                let mut metadata = HashMap::new();
+                let mut peaks = Vec::new();
+
+                let is_mona = v.get("compound").is_some() && v.get("id").is_some() && v.get("metaData").is_some() && v.get("spectrum").is_some() && v.get("filename").is_some();
+
+                if let Some(fh) = v.get("filehash").and_then(|h| h.as_str()) { metadata.insert("filehash".to_string(), fh.to_string()); }
+                if let Some(fnm) = v.get("filename").and_then(|f| f.as_str()) { metadata.insert("filename".to_string(), fnm.to_string()); }
+
+                if is_mona {
+                    if let Some(comp_name) = v["compound"].get(0).and_then(|c| c["names"].get(0)).and_then(|n| n["name"].as_str()) {
+                        metadata.insert("compound_name".to_string(), comp_name.to_string());
+                    } else {
+                        metadata.insert("compound_name".to_string(), "".to_string());
+                    }
+
+                    if let Some(meta) = v["compound"].get(0).and_then(|c| c["metaData"].as_array()) {
+                        for item in meta {
+                            if !item["computed"].as_bool().unwrap_or(false) {
+                                if let Some(name) = item["name"].as_str() {
+                                    let name_lower = name.to_lowercase();
+                                    if ["molecular formula", "smiles", "inchi", "inchikey"].contains(&name_lower.as_str()) {
+                                        if let Some(val) = item["value"].as_str() {
+                                            metadata.insert(name_lower, val.to_string());
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if let Some(id) = v["id"].as_str() { metadata.insert("spectrum_id".to_string(), id.to_string()); }
+
+                    if let Some(meta) = v["metaData"].as_array() {
+                        for item in meta {
+                            if let Some(name) = item["name"].as_str() {
+                                let name_lower = name.to_lowercase();
+                                if ["instrument", "instrument type", "ms level", "ionization", "retention time", "ionization mode", "precursor type", "collision energy", "precursor m/z"].contains(&name_lower.as_str()) {
+                                    if let Some(val) = item["value"].as_str() {
+                                        metadata.insert(name_lower, val.to_string());
+                                    } else if let Some(val) = item["value"].as_f64() {
+                                        metadata.insert(name_lower, val.to_string());
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    metadata.insert("predicted".to_string(), "false".to_string());
+                    if let Some(tags) = v["tags"].as_array() {
+                        for tag in tags {
+                            if tag["text"].as_str() == Some("In-Silico") {
+                                metadata.insert("predicted".to_string(), "true".to_string());
+                                break;
+                            }
+                        }
+                    }
+
+                    if let Some(spec) = v["spectrum"].as_str() {
+                        peaks = parse_json_peak_list_rust(spec);
+                    }
+                } else {
+                    let mut matched = false;
+                    for pk in ["spectrum", "peaks_json", "peaks"] {
+                        if let Some(pval) = v.get(pk) {
+                            if let Some(pstr) = pval.as_str() {
+                                peaks = parse_json_peak_list_rust(pstr);
+                            } else {
+                                peaks = parse_json_peak_array(pval);
+                            }
+                            matched = true;
+                            break;
+                        }
+                    }
+                    if !matched { return None; }
+
+                    if let Some(obj) = v.as_object() {
+                        for (k, val) in obj {
+                            if !["spectrum", "peaks_json", "peaks"].contains(&k.as_str()) {
+                                if let Some(s) = val.as_str() {
+                                    metadata.insert(k.to_lowercase(), s.to_string());
+                                } else if val.is_number() || val.is_boolean() {
+                                    metadata.insert(k.to_lowercase(), val.to_string());
                                 }
                             }
                         }
                     }
                 }
-                if !matched { /* Le Python ne faisait rien, donc on filtre cet item */ }
+
+                Some(ParsedJsonSpectrum { metadata, peaks })
+            }).collect()
+        });
+
+        for parsed in parsed_chunk {
+            let final_dict = PyDict::new_bound(py);
+
+            for (k, val) in parsed.metadata {
+                if let Some(mapped) = keys_dict.get(&k) {
+                    if let Some(interned_k) = interned_keys.get(mapped) {
+                        let _ = final_dict.set_item(interned_k, val);
+                    }
+                }
             }
+
+            if let Some(mapped_peak) = keys_dict.get("peaks") {
+                if let Some(interned_k) = interned_keys.get(mapped_peak) {
+                    let _ = final_dict.set_item(interned_k, parsed.peaks);
+                } else {
+                    let _ = final_dict.set_item(mapped_peak, parsed.peaks);
+                }
+            } else {
+                let _ = final_dict.set_item(&peaks_list_key, parsed.peaks);
+            }
+
+            for interned_key in &interned_keys_list {
+                if !final_dict.contains(interned_key).unwrap_or(false) {
+                    let _ = final_dict.set_item(interned_key, "");
+                }
+            }
+
+            let _ = result_list.append(final_dict);
         }
-        processed += 1;
-        if let Some(cb) = &progress_callback { cb.call1(py, (processed,))?; }
+
+        processed += current_chunk_len;
+        if let Some(cb) = &progress_callback { let _ = cb.call1(py, (processed,)); }
+
+        py.allow_threads(|| { std::thread::sleep(Duration::from_millis(1)); });
     }
 
     Ok(result_list)
