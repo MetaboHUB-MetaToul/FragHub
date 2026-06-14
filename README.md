@@ -4,7 +4,12 @@
 
 # FragHub  (1.5.0)
 ![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)
-![Required_Python](https://img.shields.io/badge/Python-3.12-blue)
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+![Rust](https://img.shields.io/badge/Rust-1.96.0-000000?logo=rust&logoColor=white)
+![Electron](https://img.shields.io/badge/Electron-40.4.0-47848F?logo=electron&logoColor=white)
+![Nuxt](https://img.shields.io/badge/Nuxt-4.4.7-00C58E?logo=nuxt&logoColor=white)
+![Vite](https://img.shields.io/badge/Vite-8.0.16-646CFF?logo=vite&logoColor=white)
+![npm](https://img.shields.io/badge/npm-11.13.0-CB3837?logo=npm&logoColor=white)
 ![License: CeCILL](https://img.shields.io/badge/License-CeCILL-yellow.svg)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17235587.svg)](https://doi.org/10.5281/zenodo.17235587)
 
