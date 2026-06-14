@@ -28,7 +28,7 @@ class FragHubParameters(BaseModel):
     reset_updates: bool = False
 
 # --- 2. INITIALISATION DE L'API ---
-app = FastAPI(title="FragHub API", version="1.5.0")
+app = FastAPI(title="FragHub API", version="2.0.0")
 
 # Configuration CORS indispensable pour que Nuxt (port 3000) puisse parler à FastAPI (port 8000)
 app.add_middleware(

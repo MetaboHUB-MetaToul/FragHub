@@ -1,17 +1,17 @@
 <div align="center">
-  <img src="scripts/GUI/assets/FragHub_icon.png" alt="FragHub Icon" /> 1.5.0
+  <img src="scripts/GUI/assets/FragHub_icon.png" alt="FragHub Icon" /> 2.0.0
 </div>
 
-# FragHub  (1.5.0)
-![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)
-![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
-![Rust](https://img.shields.io/badge/Rust-1.96.0-000000?logo=rust&logoColor=white)
-![Electron](https://img.shields.io/badge/Electron-40.4.0-47848F?logo=electron&logoColor=white)
-![Nuxt](https://img.shields.io/badge/Nuxt-4.4.7-00C58E?logo=nuxt&logoColor=white)
-![Vite](https://img.shields.io/badge/Vite-8.0.16-646CFF?logo=vite&logoColor=white)
-![npm](https://img.shields.io/badge/npm-11.13.0-CB3837?logo=npm&logoColor=white)
-![License: CeCILL](https://img.shields.io/badge/License-CeCILL-yellow.svg)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17235587.svg)](https://doi.org/10.5281/zenodo.17235587)
+# FragHub  (2.0.0)
+![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg?style=for-the-badge)
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white&style=for-the-badge)
+![Rust](https://img.shields.io/badge/Rust-1.96.0-000000?logo=rust&logoColor=white&style=for-the-badge)
+![Electron](https://img.shields.io/badge/Electron-40.4.0-47848F?logo=electron&logoColor=white&style=for-the-badge)
+![Nuxt](https://img.shields.io/badge/Nuxt-4.4.7-00C58E?logo=nuxt&logoColor=white&style=for-the-badge)
+![Vite](https://img.shields.io/badge/Vite-8.0.16-646CFF?logo=vite&logoColor=white&style=for-the-badge)
+![npm](https://img.shields.io/badge/npm-11.13.0-CB3837?logo=npm&logoColor=white&style=for-the-badge)
+![License: CeCILL](https://img.shields.io/badge/License-CeCILL-yellow.svg?style=for-the-badge)
+[![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.17235587-1f73b7?style=for-the-badge)](https://doi.org/10.5281/zenodo.17235587)
 
 ## INSTALL INSTRUCTIONS BELLOW
 [See install instructions](#installation)
@@ -39,9 +39,9 @@ Key features:<br>
 
 ## INSTALLATION
 1) Download FragHub executable corresponding to your OS HERE:<br>
-   ~~**Windows** x64: [Download Windows x64 Installer](https://zenodo.org/records/17235741/files/FragHub_1.5.0_setup_windows_x64.exe?download=1)<br>
-   **Linux** x64: [Download Linux x64 Installer](https://zenodo.org/records/17235741/files/FragHub_1.5.0_setup_Linux_x64?download=1)<br>
-   **macOS** arm64: [Download macOS arm64 app](https://zenodo.org/records/17235741/files/FragHub_macOS_1.5.0_arm64.dmg?download=1)<br>~~
+   ~~**Windows** x64: [Download Windows x64 Installer](https://zenodo.org/records/17235741/files/FragHub_2.0.0_setup_windows_x64.exe?download=1)<br>
+   **Linux** x64: [Download Linux x64 Installer](https://zenodo.org/records/17235741/files/FragHub_2.0.0_setup_Linux_x64?download=1)<br>
+   **macOS** arm64: [Download macOS arm64 app](https://zenodo.org/records/17235741/files/FragHub_macOS_2.0.0_arm64.dmg?download=1)<br>~~
 2) Execute setup installer (macOS: drag to App)
 3) select installation folder
 4) click install
