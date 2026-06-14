@@ -24,7 +24,7 @@ pub fn missing_precursormz_re_calculation(
     // 3. Trouver la différence de masse dans les dictionnaires après nettoyage de l'adduct
     let mass_diff = context.adduct_massdiff_pos.get(&adduct)
         .or_else(|| context.adduct_massdiff_neg.get(&adduct))
-        .and_then(|v| v.parse::<f64>().ok());
+        .copied();
 
     if let Some(diff) = mass_diff {
         // 4. ON UTILISE UNIQUEMENT LA MASSE RDKIT GÉNÉRÉE PAR PYTHON

@@ -125,9 +125,9 @@ const elapsedSec = computed(() => {
 })
 
 const speedVal = computed(() => {
-  // On bloque le calcul de vitesse si moins d'1 seconde s'est écoulée
-  // pour éviter les valeurs aberrantes dues aux divisions proches de 0.
-  if (progressValue.value === 0 || elapsedSec.value < 1) return "0.00"
+  if (progressValue.value === 0 || elapsedSec.value === 0) return "0.00"
+  // Si moins d'une seconde, on permet le calcul si c'est fini, sinon on limite les valeurs absurdes
+  if (elapsedSec.value < 0.1 && progressValue.value < totalItems.value) return "0.00"
   return (progressValue.value / elapsedSec.value).toFixed(2)
 })
 
@@ -144,6 +144,13 @@ const formatTime = (s) => {
   const h = Math.floor(s / 3600).toString().padStart(2, '0')
   const m = Math.floor((s % 3600) / 60).toString().padStart(2, '0')
   const sec = Math.floor(s % 60).toString().padStart(2, '0')
+  
+  // Afficher les millisecondes si l'opération prend moins de 10 secondes
+  if (s > 0 && s < 10) {
+    const ms = Math.floor((s % 1) * 1000).toString().padStart(3, '0')
+    return `${h}:${m}:${sec}.${ms}`
+  }
+  
   return `${h}:${m}:${sec}`
 }
 

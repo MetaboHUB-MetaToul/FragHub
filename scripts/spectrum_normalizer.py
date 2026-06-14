@@ -44,18 +44,25 @@ def _process_single_spectrum(spec):
                 except:
                     pass
 
-def pre_compute_rdkit_mass_multithreaded(spectrum_list, prefix_callback=None):
+def pre_compute_rdkit_mass_multithreaded(spectrum_list, prefix_callback=None, progress_callback=None, total_items_callback=None, item_type_callback=None):
     """
     Lance le calcul RDKit en multithreading sur tous les cœurs disponibles.
     """
+    total = len(spectrum_list)
+    if total_items_callback:
+        total_items_callback(total)
     if prefix_callback:
         prefix_callback("Preparing RDKit exact masses (Multithreaded)...")
+    if item_type_callback:
+        item_type_callback("spectra")
 
     # ThreadPoolExecutor va automatiquement utiliser le nombre de cœurs logiques de votre CPU
-    # La fonction map va distribuer les 600 000 spectres aux différents threads
     with ThreadPoolExecutor() as executor:
-        # On utilise un list() pour forcer l'exécution immédiate de l'itérateur
-        list(executor.map(_process_single_spectrum, spectrum_list))
+        for i, _ in enumerate(executor.map(_process_single_spectrum, spectrum_list), 1):
+            if i % 2000 == 0 and progress_callback:
+                progress_callback(i)
+        if progress_callback:
+            progress_callback(total)
 
 
 def spectrum_cleaning_processing(spectrum_list, output_directory, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None):
@@ -63,7 +70,13 @@ def spectrum_cleaning_processing(spectrum_list, output_directory, progress_callb
         return spectrum_list
 
     # 1. PRÉ-TRAITEMENT PYTHON MULTITHREADÉ (Génère _RDKIT_EXACT_MASS à la vitesse de l'éclair)
-    pre_compute_rdkit_mass_multithreaded(spectrum_list, prefix_callback)
+    pre_compute_rdkit_mass_multithreaded(
+        spectrum_list,
+        prefix_callback=prefix_callback,
+        progress_callback=progress_callback,
+        total_items_callback=total_items_callback,
+        item_type_callback=item_type_callback
+    )
 
     ordered_columns = list(spectrum_list[0].keys())
 

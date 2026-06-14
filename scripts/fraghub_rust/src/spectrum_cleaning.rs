@@ -37,7 +37,17 @@ pub fn spectrum_cleaning_processing<'py>(
 
     // Importation des paramètres Python (backend_vars) sans modifier MAIN.py !
     let backend_vars = py.import_bound("scripts.backend_vars")?;
-    let parameters_dict: HashMap<String, f64> = backend_vars.getattr("parameters_dict")?.extract()?;
+    let parameters_dict_py = backend_vars.getattr("parameters_dict")?;
+    let mut parameters_dict: HashMap<String, f64> = HashMap::new();
+    if let Ok(dict) = parameters_dict_py.downcast::<PyDict>() {
+        for (k, v) in dict.iter() {
+            if let Ok(key_str) = k.extract::<String>() {
+                if let Ok(val_float) = v.extract::<f64>() {
+                    parameters_dict.insert(key_str, val_float);
+                }
+            }
+        }
+    }
 
     // ⚠️ LA PARTIE MANQUANTE : LE CONTEXTE JSON ⚠️
     let globals = py.import_bound("scripts.globals_vars")?;
@@ -101,76 +111,78 @@ pub fn spectrum_cleaning_processing<'py>(
     let mut deleted_spectra: HashMap<String, Vec<HashMap<String, String>>> = HashMap::new();
 
     for chunk in rust_spectra.chunks(chunk_size) {
-        let results: Vec<_> = chunk.par_iter().map(|spec| {
-            let mut meta = spec.metadata.clone();
+        let results: Vec<_> = py.allow_threads(|| {
+            chunk.par_iter().map(|spec| {
+                let mut meta = spec.metadata.clone();
 
-            if spec.is_empty_peaks {
-                return Err((meta, "spectrum deleted because peaks list is empty".to_string()));
-            }
+                if spec.is_empty_peaks {
+                    return Err((meta, "spectrum deleted because peaks list is empty".to_string()));
+                }
 
-            let mut deletion_reason = None;
-            // Appel du Normalizer AVEC le contexte
-            let metadata_opt = crate::normalizer::values_normalizer::normalize_values(meta.clone(), &mut deletion_reason, &context);
+                let mut deletion_reason = None;
+                // Appel du Normalizer AVEC le contexte
+                let metadata_opt = crate::normalizer::values_normalizer::normalize_values(meta.clone(), &mut deletion_reason, &context);
 
-            if let Some(mut valid_meta) = metadata_opt {
-                let filename = valid_meta.get("FILENAME").cloned().unwrap_or_default();
-                let instrument = valid_meta.get("INSTRUMENTTYPE").cloned().unwrap_or_default();
-                let is_gc = filename.contains("_GC") || crate::globals_vars::GC_PATTERN.is_match(&instrument);
+                if let Some(mut valid_meta) = metadata_opt {
+                    let filename = valid_meta.get("FILENAME").cloned().unwrap_or_default();
+                    let instrument = valid_meta.get("INSTRUMENTTYPE").cloned().unwrap_or_default();
+                    let is_gc = filename.contains("_GC") || crate::globals_vars::GC_PATTERN.is_match(&instrument);
 
-                let mut float_pmz: Option<f64> = None;
+                    let mut float_pmz: Option<f64> = None;
 
-                if !is_gc {
-                    if let Some(pmz) = valid_meta.get("PRECURSORMZ") {
-                        if let Some(caps) = crate::globals_vars::FLOAT_CHECK_PATTERN.captures(pmz) {
-                            let matched_str = caps.get(1).unwrap().as_str();
-                            let replaced = matched_str.replace(',', ".");
-                            if let Ok(val) = replaced.parse::<f64>() {
-                                if val <= 0.0 { return Err((valid_meta, "spectrum deleted because precursor mz is less than or equal to zero.".to_string())); }
-                                valid_meta.insert("PRECURSORMZ".to_string(), matched_str.to_string());
-                                float_pmz = Some(val);
+                    if !is_gc {
+                        if let Some(pmz) = valid_meta.get("PRECURSORMZ") {
+                            if let Some(caps) = crate::globals_vars::FLOAT_CHECK_PATTERN.captures(pmz) {
+                                let matched_str = caps.get(1).unwrap().as_str();
+                                let replaced = matched_str.replace(',', ".");
+                                if let Ok(val) = replaced.parse::<f64>() {
+                                    if val <= 0.0 { return Err((valid_meta, "spectrum deleted because precursor mz is less than or equal to zero.".to_string())); }
+                                    valid_meta.insert("PRECURSORMZ".to_string(), matched_str.to_string());
+                                    float_pmz = Some(val);
+                                } else { return Err((valid_meta, "spectrum deleted because precursor mz field is empty or contains invalid characters (not a floating number).".to_string())); }
                             } else { return Err((valid_meta, "spectrum deleted because precursor mz field is empty or contains invalid characters (not a floating number).".to_string())); }
                         } else { return Err((valid_meta, "spectrum deleted because precursor mz field is empty or contains invalid characters (not a floating number).".to_string())); }
-                    } else { return Err((valid_meta, "spectrum deleted because precursor mz field is empty or contains invalid characters (not a floating number).".to_string())); }
-                }
-
-                // Filtrage des pics
-                let mut peaks = spec.peaks.clone();
-                peaks.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
-
-                let mut peak_del_reason = None;
-                peaks = crate::peaks_filters::filters::apply_filters(peaks, float_pmz, &parameters_dict, &mut peak_del_reason);
-
-                if peaks.is_empty() {
-                    let reason = peak_del_reason.unwrap_or_else(|| "spectrum deleted because peaks list is empty".to_string());
-                    return Err((valid_meta, reason));
-                }
-
-                // Calcul de l'entropie
-                let intensities: Vec<f64> = peaks.iter().map(|p| p.1).collect();
-                let entropy = crate::peaks_filters::entropy_calculation::entropy_calculation(&intensities);
-                valid_meta.insert("ENTROPY".to_string(), format!("{:.8}", entropy));
-
-                if *parameters_dict.get("remove_spectrum_under_entropy_score").unwrap_or(&0.0) == 1.0 {
-                    let threshold = *parameters_dict.get("remove_spectrum_under_entropy_score_value").unwrap_or(&0.0);
-                    if entropy < threshold {
-                        return Err((valid_meta, "spectrum deleted because it's entropy score is lower than the threshold selected by the user.".to_string()));
                     }
+
+                    // Filtrage des pics
+                    let mut peaks = spec.peaks.clone();
+                    peaks.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+
+                    let mut peak_del_reason = None;
+                    peaks = crate::peaks_filters::filters::apply_filters(peaks, float_pmz, &parameters_dict, &mut peak_del_reason);
+
+                    if peaks.is_empty() {
+                        let reason = peak_del_reason.unwrap_or_else(|| "spectrum deleted because peaks list is empty".to_string());
+                        return Err((valid_meta, reason));
+                    }
+
+                    // Calcul de l'entropie
+                    let intensities: Vec<f64> = peaks.iter().map(|p| p.1).collect();
+                    let entropy = crate::peaks_filters::entropy_calculation::entropy_calculation(&intensities);
+                    valid_meta.insert("ENTROPY".to_string(), format!("{:.8}", entropy));
+
+                    if *parameters_dict.get("remove_spectrum_under_entropy_score").unwrap_or(&0.0) == 1.0 {
+                        let threshold = *parameters_dict.get("remove_spectrum_under_entropy_score_value").unwrap_or(&0.0);
+                        if entropy < threshold {
+                            return Err((valid_meta, "spectrum deleted because it's entropy score is lower than the threshold selected by the user.".to_string()));
+                        }
+                    }
+
+                    valid_meta.insert("NUM PEAKS".to_string(), peaks.len().to_string());
+
+                    let mut formatted_peaks = String::new();
+                    for (i, &(mz, int)) in peaks.iter().enumerate() {
+                        if i > 0 { formatted_peaks.push('\n'); }
+                        formatted_peaks.push_str(&format!("{:.8} {:.8}", mz, int));
+                    }
+                    valid_meta.insert("PEAKS_LIST".to_string(), formatted_peaks);
+
+                    Ok(valid_meta)
+                } else {
+                    Err((meta, deletion_reason.unwrap_or_else(|| "Unknown deletion reason".to_string())))
                 }
-
-                valid_meta.insert("NUM PEAKS".to_string(), peaks.len().to_string());
-
-                let mut formatted_peaks = String::new();
-                for (i, &(mz, int)) in peaks.iter().enumerate() {
-                    if i > 0 { formatted_peaks.push('\n'); }
-                    formatted_peaks.push_str(&format!("{:.8} {:.8}", mz, int));
-                }
-                valid_meta.insert("PEAKS_LIST".to_string(), formatted_peaks);
-
-                Ok(valid_meta)
-            } else {
-                Err((meta, deletion_reason.unwrap_or_else(|| "Unknown deletion reason".to_string())))
-            }
-        }).collect();
+            }).collect()
+        });
 
         // Répartition des succès et des erreurs
         for res in results {
