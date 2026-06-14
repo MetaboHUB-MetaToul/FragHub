@@ -4,7 +4,9 @@ use pyo3::prelude::*;
 pub mod globals_vars;
 pub mod loading_db;
 pub mod convertors;
-pub mod splash_generator; // Ajout du module splash
+pub mod splash_generator;
+pub mod duplicatas_remover;
+// Ajout du module splash
 
 #[pymodule]
 fn fraghub_rust(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -28,6 +30,9 @@ fn fraghub_rust(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     // --- Partie 3 : Générateur de SPLASH ---
     m.add_function(wrap_pyfunction!(splash_generator::generate_splash_processing, m)?)?;
+
+    // Ajoutez ceci dans #[pymodule]
+    m.add_function(wrap_pyfunction!(duplicatas_remover::remove_duplicatas_processing, m)?)?;
 
     Ok(())
 }
