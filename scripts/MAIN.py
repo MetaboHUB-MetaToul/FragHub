@@ -216,4 +216,5 @@ def MAIN(parameters_dict, progress_callback=None, total_items_callback=None, pre
         if completion_callback: completion_callback("--- TOTAL TIME: %s ---" % time.strftime("%H:%M:%S", time.gmtime(time.time() - start_time)))
 
     except InterruptedError:
+
         if deletion_callback: deletion_callback("\n-- PROCESS INTERRUPTED BY USER --")
