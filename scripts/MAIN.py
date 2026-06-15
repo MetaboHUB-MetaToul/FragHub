@@ -3,7 +3,7 @@ from scripts.normalizer.mols_calculation import *
 # Suppression de l'import Python : from scripts.complete_from_pubchem_datas import *
 from scripts.convertors.parsing_to_dict import *
 from scripts.normalize_to_not_found import *
-from scripts.ontologies_completion import *
+# Suppression de l'import Python : from scripts.ontologies_completion import *
 from scripts.convertors.csv_to_msp import *
 from scripts.de_novo_calculation import *
 from scripts.spectrum_normalizer import *
@@ -273,10 +273,14 @@ def MAIN(progress_callback=None, total_items_callback=None, prefix_callback=None
             if step_callback:
                 step_callback("--  ONTOLOGIES COMPLETION --")
             time.sleep(0.01)
-            spectrum_list = ontologies_completion(spectrum_list, progress_callback=progress_callback,
-                                                  total_items_callback=total_items_callback,
-                                                  prefix_callback=prefix_callback,
-                                                  item_type_callback=item_type_callback)
+            # APPEL DE LA FONCTION RUST !
+            spectrum_list = fraghub_rust.ontologies_completion_processing(
+                spectrum_list,
+                progress_callback=progress_callback,
+                total_items_callback=total_items_callback,
+                prefix_callback=prefix_callback,
+                item_type_callback=item_type_callback
+            )
 
             check_stop_flag()
 
