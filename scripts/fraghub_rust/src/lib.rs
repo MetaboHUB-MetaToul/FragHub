@@ -3,6 +3,7 @@ use pyo3::prelude::*;
 
 // Déclaration de vos modules
 pub mod globals_vars;
+pub mod global_state;
 pub mod loading_db;
 pub mod convertors;
 pub mod splash_generator;
@@ -21,15 +22,12 @@ pub mod writers;
 pub mod report;
 pub mod set_projects;
 pub mod deletion_report;
+pub mod rdkit_bridge;
 
 #[pymodule]
 fn fraghub_rust(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     // --- Partie 1 : Chargement des bases de données ---
-    m.add_function(wrap_pyfunction!(loading_db::load_pubchem_datas, m)?)?;
-    m.add_function(wrap_pyfunction!(loading_db::load_ontologies_datas, m)?)?;
-    m.add_function(wrap_pyfunction!(loading_db::load_adducts, m)?)?;
-    m.add_function(wrap_pyfunction!(loading_db::load_keys, m)?)?;
-    m.add_function(wrap_pyfunction!(loading_db::load_instrument_tree, m)?)?;
+    m.add_function(wrap_pyfunction!(loading_db::load_internal_databases, m)?)?;
 
     // --- Partie 2 : Convertisseurs ---
     m.add_function(wrap_pyfunction!(convertors::loaders::generate_file_hash, m)?)?;
@@ -71,6 +69,8 @@ fn fraghub_rust(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(set_projects::init_project, m)?)?;
 
     m.add_class::<deletion_report::DeletionReport>()?;
+
+    m.add_function(wrap_pyfunction!(rdkit_bridge::process_mols, m)?)?;
 
     Ok(())
 }

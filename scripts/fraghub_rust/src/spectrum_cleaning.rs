@@ -16,13 +16,14 @@ struct RustSpectrum {
 }
 
 #[pyfunction]
-#[pyo3(signature = (spectrum_list, output_directory, ordered_columns, deletion_report_obj, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None))]
+#[pyo3(signature = (spectrum_list, output_directory, ordered_columns, deletion_report_obj, parameters_dict_py, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None))]
 pub fn spectrum_cleaning_processing<'py>(
     py: Python<'py>,
     spectrum_list: Bound<'py, PyList>,
     output_directory: String,
     ordered_columns: Vec<String>,
     deletion_report_obj: Bound<'py, PyAny>, // <-- NOUVEL ARGUMENT : L'objet DeletionReport !
+    parameters_dict_py: Bound<'py, PyDict>,
     progress_callback: Option<PyObject>,
     total_items_callback: Option<PyObject>,
     prefix_callback: Option<PyObject>,
@@ -36,9 +37,7 @@ pub fn spectrum_cleaning_processing<'py>(
     if let Some(cb) = &prefix_callback { cb.call1(py, ("cleaning spectrums:",))?; }
     if let Some(cb) = &item_type_callback { cb.call1(py, ("spectra",))?; }
 
-    // Importation des paramètres Python (backend_vars) sans modifier MAIN.py !
-    let backend_vars = py.import_bound("scripts.backend_vars")?;
-    let parameters_dict_py = backend_vars.getattr("parameters_dict")?;
+    
     let mut parameters_dict: HashMap<String, f64> = HashMap::new();
     if let Ok(dict) = parameters_dict_py.downcast::<PyDict>() {
         for (k, v) in dict.iter() {
@@ -50,22 +49,15 @@ pub fn spectrum_cleaning_processing<'py>(
         }
     }
 
-    // ⚠️ LA PARTIE MANQUANTE : LE CONTEXTE JSON ⚠️
-    let globals = py.import_bound("scripts.globals_vars")?;
-    let json_module = py.import_bound("json")?;
-
-    let adduct_pos_str: String = json_module.call_method1("dumps", (globals.getattr("adduct_dict_POS")?,))?.extract()?;
-    let adduct_neg_str: String = json_module.call_method1("dumps", (globals.getattr("adduct_dict_NEG")?,))?.extract()?;
-    let mass_pos_str: String = json_module.call_method1("dumps", (globals.getattr("adduct_massdiff_dict_POS")?,))?.extract()?;
-    let mass_neg_str: String = json_module.call_method1("dumps", (globals.getattr("adduct_massdiff_dict_NEG")?,))?.extract()?;
-    let tree_str: String = json_module.call_method1("dumps", (globals.getattr("instrument_tree")?,))?.extract()?;
-
-    let context = crate::normalizer::NormalizerContext {
-        adduct_pos: serde_json::from_str(&adduct_pos_str).unwrap(),
-        adduct_neg: serde_json::from_str(&adduct_neg_str).unwrap(),
-        adduct_massdiff_pos: serde_json::from_str(&mass_pos_str).unwrap(),
-        adduct_massdiff_neg: serde_json::from_str(&mass_neg_str).unwrap(),
-        instrument_tree: serde_json::from_str(&tree_str).unwrap(),
+    let context = {
+        let state = crate::global_state::STATE.read().unwrap();
+        crate::normalizer::NormalizerContext {
+            adduct_pos: state.adduct_dict_pos.clone(),
+            adduct_neg: state.adduct_dict_neg.clone(),
+            adduct_massdiff_pos: state.adduct_massdiff_dict_pos.clone(),
+            adduct_massdiff_neg: state.adduct_massdiff_dict_neg.clone(),
+            instrument_tree: state.instrument_tree.clone(),
+        }
     };
 
     // 1. Extraction ultra-rapide des données vers Rust

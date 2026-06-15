@@ -277,10 +277,11 @@ fn process_spectrum_peaks(formula: &str, peaks_list_str: &str, ppm_tol: f64) -> 
 }
 
 #[pyfunction]
-#[pyo3(signature = (spectrum_list_df, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None))]
+#[pyo3(signature = (spectrum_list_df, parameters_dict_py, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None))]
 pub fn de_novo_calculation_processing<'py>(
     py: Python<'py>,
     spectrum_list_df: Bound<'py, PyAny>,
+    parameters_dict_py: Bound<'py, PyDict>,
     progress_callback: Option<PyObject>,
     total_items_callback: Option<PyObject>,
     prefix_callback: Option<PyObject>,
@@ -296,10 +297,13 @@ pub fn de_novo_calculation_processing<'py>(
     let total_items = spectrum_list.len();
 
     if let Some(cb) = &total_items_callback { cb.call1(py, (total_items, 0))?; }
-
-    let backend_vars = py.import_bound("scripts.backend_vars")?;
-    let params = backend_vars.getattr("parameters_dict")?.downcast::<PyDict>()?.clone();
-    let ppm_tol = params.get_item("de_novo_ppm_tolerance").unwrap().unwrap().extract::<f64>().unwrap_or(5.0);
+    
+    let params = parameters_dict_py;
+    let ppm_tol = if let Ok(Some(val)) = params.get_item("de_novo_ppm_tolerance") {
+        val.extract::<f64>().unwrap_or(5.0)
+    } else {
+        5.0
+    };
 
     let mut rust_spectra = Vec::with_capacity(total_items);
     for item in spectrum_list.iter() {

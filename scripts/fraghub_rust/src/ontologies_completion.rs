@@ -29,15 +29,9 @@ pub fn ontologies_completion_processing<'py>(
     let total_items = spectrum_list.len();
     if let Some(cb) = &total_items_callback { cb.call1(py, (total_items, 0))?; }
 
-    // --- Step 2: Récupération de ontologies_df depuis Python ---
-    let globals = py.import_bound("scripts.globals_vars")?;
-    let ontologies_df = globals.getattr("ontologies_df")?;
-
-    // Transformation en dictionnaire ultra-rapide {INCHIKEY: {colonnes...}}
-    let ont_dict_py = ontologies_df
-        .call_method1("set_index", ("INCHIKEY",))?
-        .call_method1("to_dict", ("index",))?;
-    let ont_dict = ont_dict_py.downcast::<PyDict>()?;
+    // --- Step 2: Récupération de ontologies_df depuis Rust Global State ---
+    let state = crate::global_state::STATE.read().unwrap();
+    let ont_dict = &state.ontologies_datas;
 
     let columns_to_update = [
         "CLASSYFIRE_SUPERCLASS", "CLASSYFIRE_CLASS", "CLASSYFIRE_SUBCLASS",
@@ -60,16 +54,11 @@ pub fn ontologies_completion_processing<'py>(
             let inchikey = inchikey_py.extract::<String>().unwrap_or_default();
 
             if !inchikey.is_empty() && inchikey.to_lowercase() != "nan" {
-                if let Ok(Some(ont_row_py)) = ont_dict.get_item(&inchikey) {
-                    if let Ok(ont_row) = ont_row_py.downcast::<PyDict>() {
-
-                        // On a trouvé les données, on les injecte !
-                        for col in columns_to_update {
-                            if let Ok(Some(new_val_py)) = ont_row.get_item(col) {
-                                let new_val = new_val_py.extract::<String>().unwrap_or_else(|_| new_val_py.to_string());
-                                if !new_val.trim().is_empty() && new_val.to_lowercase() != "nan" {
-                                    row.set_item(col, new_val)?;
-                                }
+                if let Some(ont_row) = ont_dict.get(&inchikey) {
+                    for col in columns_to_update {
+                        if let Some(new_val) = ont_row.get(col) {
+                            if !new_val.trim().is_empty() && new_val.to_lowercase() != "nan" {
+                                row.set_item(col, new_val)?;
                             }
                         }
                     }

@@ -8,12 +8,21 @@ from fastapi import FastAPI, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from scripts.MAIN import MAIN
-from scripts.backend_vars import parameters_dict
-import scripts.globals_vars as g_vars
+parameters_dict = {}
+import fraghub_rust
 
 import sys
 import os
+
+if getattr(sys, 'frozen', False):
+    BASE_DIR = sys._MEIPASS
+else:
+    BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
 
 # Redirection forcée de la sortie standard et d'erreur vers un fichier
 log_path = os.path.join(os.path.expanduser("~"), "fraghub_debug.txt")
@@ -141,13 +150,14 @@ async def health_check():
 
 @app.get("/init-data")
 async def init_data():
-    g_vars.load_internal_databases()
+    fraghub_rust.load_internal_databases(BASE_DIR)
     return {"status": "loaded"}
 
 # --- EXÉCUTION ---
 def execute_main_safely():
     try:
         MAIN(
+            parameters_dict=parameters_dict,
             progress_callback=progress_callback,
             total_items_callback=total_items_callback,
             prefix_callback=prefix_callback,

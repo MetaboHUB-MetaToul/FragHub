@@ -59,16 +59,7 @@ pub fn split_pos_neg<'py>(
         }
     }
 
-    // Mise à jour de votre fichier global_report en Python !
-    if let Ok(global_report) = py.import_bound("scripts.global_report") {
-        if let Ok(report_dict) = global_report.getattr("report_dict") {
-            if let Ok(dict) = report_dict.downcast::<PyDict>() {
-                dict.set_item("TOTAL_unique_inchikey", unique_inchikeys.len())?;
-            }
-        }
-    }
-
-    if let Some(cb) = &progress_callback { cb.call1(py, (pos_list.len(),))?; }
+        if let Some(cb) = &progress_callback { cb.call1(py, (pos_list.len(),))?; }
     if let Some(cb) = &progress_callback { cb.call1(py, (total_items,))?; }
 
     let pos_df = build_dataframe(py, pos_list, original_columns.clone())?;

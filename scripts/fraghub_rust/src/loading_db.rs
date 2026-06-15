@@ -1,37 +1,41 @@
 use pyo3::prelude::*;
-use pyo3::types::PyDict;
 use rayon::prelude::*;
 use std::collections::HashMap;
 use std::fs;
 use csv::ReaderBuilder;
+use std::path::Path;
+use crate::global_state::STATE;
 
-// Les fonctions internes (pas besoin de pub)
-fn read_csv_to_columns(filepath: &str, sep: u8) -> Result<HashMap<String, Vec<String>>, Box<dyn std::error::Error + Send + Sync>> {
+fn read_csv_to_dict_of_dicts(filepath: &str, sep: u8, key_col: &str) -> Result<HashMap<String, HashMap<String, String>>, Box<dyn std::error::Error + Send + Sync>> {
     let mut rdr = ReaderBuilder::new()
         .delimiter(sep)
         .quote(b'"')
         .from_path(filepath)?;
 
     let headers: Vec<String> = rdr.headers()?.iter().map(|s| s.to_string()).collect();
-    let mut columns: Vec<Vec<String>> = vec![Vec::new(); headers.len()];
+    let mut map = HashMap::new();
+
+    let key_idx = headers.iter().position(|h| h == key_col);
+    if key_idx.is_none() {
+        return Ok(map);
+    }
+    let key_idx = key_idx.unwrap();
 
     for result in rdr.records() {
-        let record = result?;
-        for (i, field) in record.iter().enumerate() {
-            if i < columns.len() {
-                columns[i].push(field.to_string());
+        if let Ok(record) = result {
+            if let Some(key_val) = record.get(key_idx) {
+                let mut row_dict = HashMap::new();
+                for (i, val) in record.iter().enumerate() {
+                    row_dict.insert(headers[i].clone(), val.to_string());
+                }
+                map.insert(key_val.to_string(), row_dict);
             }
         }
-    }
-
-    let mut map = HashMap::new();
-    for (header, column) in headers.into_iter().zip(columns.into_iter()) {
-        map.insert(header, column);
     }
     Ok(map)
 }
 
-fn read_multiple_csvs(folder_path: &str, sep: u8, filter_str: &str) -> HashMap<String, Vec<String>> {
+fn read_multiple_csvs_to_dict(folder_path: &str, sep: u8, filter_str: &str, key_col: &str) -> HashMap<String, HashMap<String, String>> {
     let mut paths = Vec::new();
     if let Ok(entries) = fs::read_dir(folder_path) {
         for entry in entries.flatten() {
@@ -47,148 +51,114 @@ fn read_multiple_csvs(folder_path: &str, sep: u8, filter_str: &str) -> HashMap<S
     }
 
     let results: Vec<_> = paths.par_iter().map(|p| {
-        read_csv_to_columns(p, sep)
+        read_csv_to_dict_of_dicts(p, sep, key_col)
     }).collect();
 
-    let mut merged: HashMap<String, Vec<String>> = HashMap::new();
+    let mut merged: HashMap<String, HashMap<String, String>> = HashMap::new();
     for res in results {
         if let Ok(map) = res {
-            if merged.is_empty() {
-                merged = map;
-            } else {
-                for (k, mut v) in map {
-                    if let Some(existing) = merged.get_mut(&k) {
-                        existing.append(&mut v);
-                    } else {
-                        merged.insert(k, v);
-                    }
-                }
+            for (k, v) in map {
+                merged.insert(k, v);
             }
         }
     }
     merged
 }
 
-// Les fonctions Python (on ajoute pub)
 #[pyfunction]
-pub fn load_pubchem_datas(py: Python, folder_path: &str) -> PyResult<PyObject> {
-    let map = read_multiple_csvs(folder_path, b';', "pubchem_rdkit_clean_part");
-    let dict = PyDict::new_bound(py);
-    for (k, v) in map {
-        dict.set_item(k, v)?;
-    }
-    Ok(dict.into())
-}
+pub fn load_internal_databases(_py: Python, base_dir: &str) -> PyResult<()> {
+    let base_path = Path::new(base_dir);
 
-#[pyfunction]
-pub fn load_ontologies_datas(py: Python, folder_path: &str) -> PyResult<PyObject> {
-    let map = read_multiple_csvs(folder_path, b';', "ontologies_dict");
-    let dict = PyDict::new_bound(py);
-    for (k, v) in map {
-        dict.set_item(k, v)?;
-    }
-    Ok(dict.into())
-}
+    // 1. Pubchem
+    let pubchem_path = base_path.join("datas").join("pubchem_datas");
+    let pubchem_datas = read_multiple_csvs_to_dict(&pubchem_path.to_string_lossy(), b';', "pubchem_rdkit_clean_part", "INCHIKEY");
 
-#[pyfunction]
-pub fn load_adducts(py: Python, filepath: &str) -> PyResult<(PyObject, PyObject, PyObject, PyObject)> {
-    let mut rdr = ReaderBuilder::new()
-        .delimiter(b';')
-        .from_path(filepath)
-        .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
+    // 2. Ontologies
+    let ontologies_path = base_path.join("datas").join("ontologies_datas");
+    let ontologies_datas = read_multiple_csvs_to_dict(&ontologies_path.to_string_lossy(), b';', "ontologies_dict", "INCHIKEY");
 
+    // 3. Adducts
+    let adduct_file_path = base_path.join("datas").join("adduct_to_convert.csv");
     let mut adduct_dict_pos = HashMap::new();
     let mut adduct_massdiff_dict_pos = HashMap::new();
     let mut adduct_dict_neg = HashMap::new();
     let mut adduct_massdiff_dict_neg = HashMap::new();
 
-    let headers = rdr.headers().map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?.clone();
-
-    let mut idx_known = 0;
-    let mut idx_default = 1;
-    let mut idx_massdiff = 2;
-    let mut idx_ionmode = 3;
-    for (i, h) in headers.iter().enumerate() {
-        match h {
-            "known_adduct" => idx_known = i,
-            "fraghub_default" => idx_default = i,
-            "massdiff" => idx_massdiff = i,
-            "ionmode" => idx_ionmode = i,
-            _ => {}
+    if let Ok(mut rdr) = ReaderBuilder::new().delimiter(b';').from_path(&adduct_file_path) {
+        if let Ok(headers) = rdr.headers() {
+            let headers = headers.clone();
+            let mut idx_known = 0; let mut idx_default = 1; let mut idx_massdiff = 2; let mut idx_ionmode = 3;
+            for (i, h) in headers.iter().enumerate() {
+                match h {
+                    "known_adduct" => idx_known = i,
+                    "fraghub_default" => idx_default = i,
+                    "massdiff" => idx_massdiff = i,
+                    "ionmode" => idx_ionmode = i,
+                    _ => {}
+                }
+            }
+            for result in rdr.records() {
+                if let Ok(record) = result {
+                    let known = record.get(idx_known).unwrap_or("").to_string();
+                    let default = record.get(idx_default).unwrap_or("").to_string();
+                    let massdiff_str = record.get(idx_massdiff).unwrap_or("0.0");
+                    let massdiff: f64 = massdiff_str.parse().unwrap_or(0.0);
+                    let ionmode = record.get(idx_ionmode).unwrap_or("");
+                    if ionmode == "positive" {
+                        adduct_dict_pos.insert(known.clone(), default.clone());
+                        adduct_massdiff_dict_pos.insert(default.clone(), massdiff);
+                    } else if ionmode == "negative" {
+                        adduct_dict_neg.insert(known.clone(), default.clone());
+                        adduct_massdiff_dict_neg.insert(default.clone(), massdiff);
+                    }
+                }
+            }
         }
     }
 
-    for result in rdr.records() {
-        let record = result.map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
-        let known = record.get(idx_known).unwrap_or("").to_string();
-        let default = record.get(idx_default).unwrap_or("").to_string();
-        let massdiff_str = record.get(idx_massdiff).unwrap_or("0.0");
-        let massdiff: f64 = massdiff_str.parse().unwrap_or(0.0);
-        let ionmode = record.get(idx_ionmode).unwrap_or("");
-
-        if ionmode == "positive" {
-            adduct_dict_pos.insert(known.clone(), default.clone());
-            adduct_massdiff_dict_pos.insert(default.clone(), massdiff);
-        } else if ionmode == "negative" {
-            adduct_dict_neg.insert(known.clone(), default.clone());
-            adduct_massdiff_dict_neg.insert(default.clone(), massdiff);
-        }
-    }
-
-    let dict_pos = PyDict::new_bound(py);
-    for (k, v) in adduct_dict_pos { dict_pos.set_item(k, v)?; }
-
-    let mdict_pos = PyDict::new_bound(py);
-    for (k, v) in adduct_massdiff_dict_pos { mdict_pos.set_item(k, v)?; }
-
-    let dict_neg = PyDict::new_bound(py);
-    for (k, v) in adduct_dict_neg { dict_neg.set_item(k, v)?; }
-
-    let mdict_neg = PyDict::new_bound(py);
-    for (k, v) in adduct_massdiff_dict_neg { mdict_neg.set_item(k, v)?; }
-
-    Ok((dict_pos.into(), mdict_pos.into(), dict_neg.into(), mdict_neg.into()))
-}
-
-#[pyfunction]
-pub fn load_keys(py: Python, filepath: &str) -> PyResult<PyObject> {
-    let mut rdr = ReaderBuilder::new()
-        .delimiter(b';')
-        .from_path(filepath)
-        .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
-
+    // 4. Keys
+    let keys_file_path = base_path.join("datas").join("key_to_convert.csv");
     let mut keys_dict = HashMap::new();
-
-    let headers = rdr.headers().map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?.clone();
-    let mut idx_known = 0;
-    let mut idx_default = 1;
-    for (i, h) in headers.iter().enumerate() {
-        match h {
-            "known_synonym" => idx_known = i,
-            "fraghub_default" => idx_default = i,
-            _ => {}
+    if let Ok(mut rdr) = ReaderBuilder::new().delimiter(b';').from_path(&keys_file_path) {
+        if let Ok(headers) = rdr.headers() {
+            let headers = headers.clone();
+            let mut idx_known = 0; let mut idx_default = 1;
+            for (i, h) in headers.iter().enumerate() {
+                match h {
+                    "known_synonym" => idx_known = i,
+                    "fraghub_default" => idx_default = i,
+                    _ => {}
+                }
+            }
+            for result in rdr.records() {
+                if let Ok(record) = result {
+                    let known = record.get(idx_known).unwrap_or("").to_string();
+                    let default = record.get(idx_default).unwrap_or("").to_uppercase();
+                    keys_dict.insert(known, default);
+                }
+            }
         }
     }
 
-    for result in rdr.records() {
-        let record = result.map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
-        let known = record.get(idx_known).unwrap_or("").to_string();
-        let default = record.get(idx_default).unwrap_or("").to_uppercase();
-        keys_dict.insert(known, default);
+    // 5. Instrument tree
+    let instrument_tree_path = base_path.join("datas").join("instruments_tree.json");
+    let instrument_tree: serde_json::Value = if let Ok(content) = fs::read_to_string(&instrument_tree_path) {
+        serde_json::from_str(&content).unwrap_or(serde_json::Value::Null)
+    } else {
+        serde_json::Value::Null
+    };
+
+    // Update global state
+    if let Ok(mut state) = STATE.write() {
+        state.pubchem_datas = pubchem_datas;
+        state.ontologies_datas = ontologies_datas;
+        state.adduct_dict_pos = adduct_dict_pos;
+        state.adduct_massdiff_dict_pos = adduct_massdiff_dict_pos;
+        state.adduct_dict_neg = adduct_dict_neg;
+        state.adduct_massdiff_dict_neg = adduct_massdiff_dict_neg;
+        state.keys_dict = keys_dict;
+        state.instrument_tree = instrument_tree;
     }
 
-    let dict = PyDict::new_bound(py);
-    for (k, v) in keys_dict {
-        dict.set_item(k, v)?;
-    }
-    Ok(dict.into())
-}
-
-#[pyfunction]
-pub fn load_instrument_tree(py: Python, filepath: &str) -> PyResult<PyObject> {
-    let content = fs::read_to_string(filepath)
-        .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
-    let json_module = py.import_bound("json")?;
-    let res = json_module.call_method1("loads", (content,))?;
-    Ok(res.into())
+    Ok(())
 }

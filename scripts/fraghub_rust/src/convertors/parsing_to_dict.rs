@@ -10,18 +10,21 @@ use crate::convertors::mgf_to_dict::mgf_to_dict_processing;
 use crate::convertors::csv_to_dict::load_and_parse_csv;
 
 #[pyfunction]
-#[pyo3(signature = (input_paths, keys_dict, keys_list, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None, step_callback=None))]
+#[pyo3(signature = (input_paths, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None, step_callback=None))]
 pub fn parsing_to_dict_processing<'py>(
     py: Python<'py>,
     input_paths: Vec<String>,
-    keys_dict: HashMap<String, String>,
-    keys_list: Vec<String>,
     progress_callback: Option<PyObject>,
     total_items_callback: Option<PyObject>,
     prefix_callback: Option<PyObject>,
     item_type_callback: Option<PyObject>,
     step_callback: Option<PyObject>,
 ) -> PyResult<Bound<'py, PyTuple>> {
+
+    let (keys_dict, keys_list) = {
+        let state = crate::global_state::STATE.read().unwrap();
+        (state.keys_dict.clone(), state.keys_list.clone())
+    };
 
     let final_json = PyList::empty_bound(py);
     let final_msp = PyList::empty_bound(py);

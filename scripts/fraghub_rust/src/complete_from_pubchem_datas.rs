@@ -27,14 +27,9 @@ pub fn complete_from_pubchem_datas<'py>(
     let total_items = spectrum_list.len();
     if let Some(cb) = &total_items_callback { cb.call1(py, (total_items, 0))?; }
 
-    // --- Step 2: Récupération de pubchem_datas depuis Python ---
-    let globals = py.import_bound("scripts.globals_vars")?;
-    let pubchem_df = globals.getattr("pubchem_datas")?;
-
-    let pubchem_dict_py = pubchem_df
-        .call_method1("set_index", ("INCHIKEY",))?
-        .call_method1("to_dict", ("index",))?;
-    let pubchem_dict = pubchem_dict_py.downcast::<PyDict>()?;
+    // --- Step 2: Récupération de pubchem_datas depuis Rust Global State ---
+    let state = crate::global_state::STATE.read().unwrap();
+    let pubchem_dict = &state.pubchem_datas;
 
     let columns_to_update = ["INCHI", "SMILES", "FORMULA", "NAME", "EXACTMASS", "AVERAGEMASS"];
     let mut processed = 0;
@@ -47,17 +42,11 @@ pub fn complete_from_pubchem_datas<'py>(
             let inchikey = inchikey_py.extract::<String>().unwrap_or_default();
 
             if !inchikey.is_empty() && inchikey.to_lowercase() != "nan" {
-                if let Ok(Some(pubchem_row_py)) = pubchem_dict.get_item(&inchikey) {
-                    if let Ok(pubchem_row) = pubchem_row_py.downcast::<PyDict>() {
-
-                        for col in columns_to_update {
-                            // On reproduit fidèlement la logique de Pandas (pubchem.combine_first(original))
-                            // Si PubChem a une valeur, elle écrase la valeur originale.
-                            if let Ok(Some(new_val_py)) = pubchem_row.get_item(col) {
-                                let new_val = new_val_py.extract::<String>().unwrap_or_else(|_| new_val_py.to_string());
-                                if !new_val.trim().is_empty() && new_val.to_lowercase() != "nan" {
-                                    row.set_item(col, new_val)?;
-                                }
+                if let Some(pubchem_row) = pubchem_dict.get(&inchikey) {
+                    for col in columns_to_update {
+                        if let Some(new_val) = pubchem_row.get(col) {
+                            if !new_val.trim().is_empty() && new_val.to_lowercase() != "nan" {
+                                row.set_item(col, new_val)?;
                             }
                         }
                     }
