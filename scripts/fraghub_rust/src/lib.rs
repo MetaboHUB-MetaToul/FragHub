@@ -18,6 +18,7 @@ pub mod normalize_to_not_found;
 pub mod splitter;
 pub mod csv_to_msp;
 pub mod writers;
+pub mod report;
 
 #[pymodule]
 fn fraghub_rust(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -61,6 +62,8 @@ fn fraghub_rust(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(writers::writting_json_processing, m)?)?;
 
     m.add_function(wrap_pyfunction!(convertors::parsing_to_dict::parsing_to_dict_processing, m)?)?;
+
+    m.add_function(wrap_pyfunction!(report::generate_report_processing, m)?)?;
 
     Ok(())
 }
