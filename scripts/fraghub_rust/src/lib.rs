@@ -34,7 +34,7 @@ fn fraghub_rust(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(convertors::loaders::load_spectrum_list_from_mgf, m)?)?;
     m.add_function(wrap_pyfunction!(convertors::loaders::load_spectrum_list_json, m)?)?;
     m.add_function(wrap_pyfunction!(convertors::loaders::load_spectrum_list_json_2, m)?)?;
-    m.add_function(wrap_pyfunction!(convertors::csv_to_dict::csv_to_dict_processing, m)?)?;
+    m.add_function(wrap_pyfunction!(convertors::csv_to_dict::load_and_parse_csv, m)?)?;
     m.add_function(wrap_pyfunction!(convertors::json_to_dict::json_to_dict_processing, m)?)?;
     m.add_function(wrap_pyfunction!(convertors::mgf_to_dict::mgf_to_dict_processing, m)?)?;
     m.add_function(wrap_pyfunction!(convertors::msp_to_dict::msp_to_dict_processing, m)?)?;
@@ -59,6 +59,8 @@ fn fraghub_rust(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(writers::writting_msp_processing, m)?)?;
     m.add_function(wrap_pyfunction!(writers::writting_csv_processing, m)?)?;
     m.add_function(wrap_pyfunction!(writers::writting_json_processing, m)?)?;
+
+    m.add_function(wrap_pyfunction!(convertors::parsing_to_dict::parsing_to_dict_processing, m)?)?;
 
     Ok(())
 }
