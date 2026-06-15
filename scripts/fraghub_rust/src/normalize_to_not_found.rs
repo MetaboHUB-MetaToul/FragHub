@@ -3,18 +3,11 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyAny};
 
 #[pyfunction]
-#[pyo3(signature = (spectrum_list_df))]
+#[pyo3(signature = (spectrum_list))]
 pub fn normalize_to_not_found_processing<'py>(
     py: Python<'py>,
-    spectrum_list_df: Bound<'py, PyAny>,
-) -> PyResult<Bound<'py, PyAny>> {
-
-    // On sauvegarde l'ordre des colonnes du DataFrame original
-    let original_columns = spectrum_list_df.getattr("columns")?;
-
-    // On convertit le DataFrame Pandas en liste de dictionnaires pour Rust
-    let dict_list_py = spectrum_list_df.call_method1("to_dict", ("records",))?;
-    let spectrum_list = dict_list_py.downcast::<PyList>()?;
+    spectrum_list: &Bound<'py, PyList>,
+) -> PyResult<Bound<'py, PyList>> {
 
     // On parcourt chaque spectre
     for item in spectrum_list.iter() {
@@ -40,13 +33,5 @@ pub fn normalize_to_not_found_processing<'py>(
         }
     }
 
-    // Reconstruction du DataFrame Pandas
-    let pandas = py.import_bound("pandas")?;
-    let kwargs = PyDict::new_bound(py);
-    kwargs.set_item("columns", original_columns)?;
-
-    let args = (spectrum_list,);
-    let updated_df = pandas.call_method("DataFrame", args, Some(&kwargs))?;
-
-    Ok(updated_df)
+    Ok(spectrum_list.clone())
 }

@@ -3,26 +3,22 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyAny};
 
 #[pyfunction]
-#[pyo3(signature = (spectrum_list_df, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None))]
+#[pyo3(signature = (spectrum_list, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None))]
 pub fn ontologies_completion_processing<'py>(
     py: Python<'py>,
-    spectrum_list_df: Bound<'py, PyAny>,
+    spectrum_list: &Bound<'py, PyList>,
     progress_callback: Option<PyObject>,
     total_items_callback: Option<PyObject>,
     prefix_callback: Option<PyObject>,
     item_type_callback: Option<PyObject>,
-) -> PyResult<Bound<'py, PyAny>> {
+) -> PyResult<Bound<'py, PyList>> {
 
     // --- Step 1: Initialization ---
     if let Some(cb) = &prefix_callback { cb.call1(py, ("updating ontologies (Rust):",))?; }
     if let Some(cb) = &item_type_callback { cb.call1(py, ("rows",))?; }
 
     // On sauvegarde l'ordre des colonnes
-    let original_columns = spectrum_list_df.getattr("columns")?;
 
-    // On convertit le DataFrame en liste de dictionnaires
-    let dict_list_py = spectrum_list_df.call_method1("to_dict", ("records",))?;
-    let spectrum_list = dict_list_py.downcast::<PyList>()?;
 
     // Contrairement à votre Python qui simulait la progression avec le nombre de clés uniques,
     // on va faire une vraie progression fluide basée sur le nombre total de lignes.
@@ -75,13 +71,5 @@ pub fn ontologies_completion_processing<'py>(
 
     if let Some(cb) = &progress_callback { cb.call1(py, (total_items,))?; }
 
-    // --- Step 4: Reconstruction du DataFrame ---
-    let pandas = py.import_bound("pandas")?;
-    let kwargs = PyDict::new_bound(py);
-    kwargs.set_item("columns", original_columns)?;
-
-    let args = (spectrum_list,);
-    let updated_df = pandas.call_method("DataFrame", args, Some(&kwargs))?;
-
-    Ok(updated_df)
+    Ok(spectrum_list.clone())
 }

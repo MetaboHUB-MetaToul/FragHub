@@ -4,7 +4,7 @@ use pyo3::types::{PyDict, PyList, PyAny};
 use std::collections::HashSet;
 
 // Fonction utilitaire pour reconstruire un DataFrame Pandas ultra-rapidement
-fn build_dataframe<'py>(py: Python<'py>, list: Bound<'py, PyList>, columns: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+fn _build_dataframe_unused<'py>(py: Python<'py>, list: Bound<'py, PyList>, columns: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let pandas = py.import_bound("pandas")?;
     let kwargs = PyDict::new_bound(py);
     kwargs.set_item("columns", columns)?;
@@ -12,22 +12,19 @@ fn build_dataframe<'py>(py: Python<'py>, list: Bound<'py, PyList>, columns: Boun
 }
 
 #[pyfunction]
-#[pyo3(signature = (concatenate_df, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None))]
+#[pyo3(signature = (spectrum_list, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None))]
 pub fn split_pos_neg<'py>(
     py: Python<'py>,
-    concatenate_df: Bound<'py, PyAny>,
+    spectrum_list: &Bound<'py, PyList>,
     progress_callback: Option<PyObject>,
     total_items_callback: Option<PyObject>,
     prefix_callback: Option<PyObject>,
     item_type_callback: Option<PyObject>,
-) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)> {
+) -> PyResult<(Bound<'py, PyList>, Bound<'py, PyList>)> {
     if let Some(cb) = &prefix_callback { cb.call1(py, ("Splitting POS/NEG:",))?; }
     if let Some(cb) = &item_type_callback { cb.call1(py, ("rows",))?; }
 
-    let original_columns = concatenate_df.getattr("columns")?;
-    let dict_list_py = concatenate_df.call_method1("to_dict", ("records",))?;
-    let records = dict_list_py.downcast::<PyList>()?;
-    let total_items = records.len();
+    let total_items = spectrum_list.len();
 
     if let Some(cb) = &total_items_callback { cb.call1(py, (total_items, 0))?; }
 
@@ -35,8 +32,7 @@ pub fn split_pos_neg<'py>(
     let pos_list = PyList::empty_bound(py);
     let neg_list = PyList::empty_bound(py);
 
-    for i in 0..total_items {
-        let item = records.get_item(i).unwrap();
+    for item in spectrum_list.iter() {
         let dict = item.downcast::<PyDict>()?;
 
         // Stockage des Inchikeys uniques
@@ -62,43 +58,34 @@ pub fn split_pos_neg<'py>(
         if let Some(cb) = &progress_callback { cb.call1(py, (pos_list.len(),))?; }
     if let Some(cb) = &progress_callback { cb.call1(py, (total_items,))?; }
 
-    let pos_df = build_dataframe(py, pos_list, original_columns.clone())?;
-    let neg_df = build_dataframe(py, neg_list, original_columns)?;
-
-    Ok((pos_df, neg_df))
+    Ok((pos_list, neg_list))
 }
 
 #[pyfunction]
-#[pyo3(signature = (pos_df, neg_df, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None))]
+#[pyo3(signature = (pos_list, neg_list, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None))]
 pub fn split_LC_GC<'py>(
     py: Python<'py>,
-    pos_df: Bound<'py, PyAny>,
-    neg_df: Bound<'py, PyAny>,
+    pos_list: &Bound<'py, PyList>,
+    neg_list: &Bound<'py, PyList>,
     progress_callback: Option<PyObject>,
     total_items_callback: Option<PyObject>,
     prefix_callback: Option<PyObject>,
     item_type_callback: Option<PyObject>,
-) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>, Bound<'py, PyAny>, Bound<'py, PyAny>)> {
+) -> PyResult<(Bound<'py, PyList>, Bound<'py, PyList>, Bound<'py, PyList>, Bound<'py, PyList>)> {
     if let Some(cb) = &prefix_callback { cb.call1(py, ("Splitting LC/GC:",))?; }
     if let Some(cb) = &item_type_callback { cb.call1(py, ("rows",))?; }
 
-    let pos_len: usize = pos_df.call_method0("__len__")?.extract()?;
-    let neg_len: usize = neg_df.call_method0("__len__")?.extract()?;
+    let pos_len = pos_list.len();
+    let neg_len = neg_list.len();
     let total_rows = pos_len + neg_len;
 
     if let Some(cb) = &total_items_callback { cb.call1(py, (total_rows, 0))?; }
 
-    let partition_lc_gc = |df: &Bound<'py, PyAny>| -> PyResult<(Bound<'py, PyList>, Bound<'py, PyList>)> {
+    let partition_lc_gc = |list: &Bound<'py, PyList>| -> PyResult<(Bound<'py, PyList>, Bound<'py, PyList>)> {
         let lc_list = PyList::empty_bound(py);
         let gc_list = PyList::empty_bound(py);
-
-        let len: usize = df.call_method0("__len__")?.extract()?;
-        if len > 0 {
-            let dict_list_py = df.call_method1("to_dict", ("records",))?;
-            let records = dict_list_py.downcast::<PyList>()?;
-
-            for i in 0..records.len() {
-                let item = records.get_item(i).unwrap();
+        if list.len() > 0 {
+            for item in list.iter() {
                 let dict = item.downcast::<PyDict>()?;
 
                 let mut is_gc = false;
@@ -121,54 +108,43 @@ pub fn split_LC_GC<'py>(
         Ok((lc_list, gc_list))
     };
 
-    let (pos_lc_list, pos_gc_list) = partition_lc_gc(&pos_df)?;
+    let (pos_lc_list, pos_gc_list) = partition_lc_gc(&pos_list)?;
     if let Some(cb) = &progress_callback { cb.call1(py, (pos_gc_list.len(),))?; }
     if let Some(cb) = &progress_callback { cb.call1(py, (pos_len,))?; }
 
-    let (neg_lc_list, neg_gc_list) = partition_lc_gc(&neg_df)?;
+    let (neg_lc_list, neg_gc_list) = partition_lc_gc(&neg_list)?;
     if let Some(cb) = &progress_callback { cb.call1(py, (pos_len + neg_gc_list.len(),))?; }
     if let Some(cb) = &progress_callback { cb.call1(py, (total_rows,))?; }
 
-    let columns = pos_df.getattr("columns")?;
-    let pos_lc = build_dataframe(py, pos_lc_list, columns.clone())?;
-    let pos_gc = build_dataframe(py, pos_gc_list, columns.clone())?;
-    let neg_lc = build_dataframe(py, neg_lc_list, columns.clone())?;
-    let neg_gc = build_dataframe(py, neg_gc_list, columns)?;
-
-    Ok((pos_lc, pos_gc, neg_lc, neg_gc))
+    Ok((pos_lc_list, pos_gc_list, neg_lc_list, neg_gc_list))
 }
 
 #[pyfunction]
 #[pyo3(signature = (pos_lc, pos_gc, neg_lc, neg_gc, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None))]
 pub fn exp_in_silico_splitter<'py>(
     py: Python<'py>,
-    pos_lc: Bound<'py, PyAny>,
-    pos_gc: Bound<'py, PyAny>,
-    neg_lc: Bound<'py, PyAny>,
-    neg_gc: Bound<'py, PyAny>,
+    pos_lc: &Bound<'py, PyList>,
+    pos_gc: &Bound<'py, PyList>,
+    neg_lc: &Bound<'py, PyList>,
+    neg_gc: &Bound<'py, PyList>,
     progress_callback: Option<PyObject>,
     total_items_callback: Option<PyObject>,
     prefix_callback: Option<PyObject>,
     item_type_callback: Option<PyObject>,
 ) -> PyResult<(
-    Bound<'py, PyAny>, Bound<'py, PyAny>, // POS_LC_Exp, POS_LC_InSilico
-    Bound<'py, PyAny>, Bound<'py, PyAny>, // POS_GC_Exp, POS_GC_InSilico
-    Bound<'py, PyAny>, Bound<'py, PyAny>, // NEG_LC_Exp, NEG_LC_InSilico
-    Bound<'py, PyAny>, Bound<'py, PyAny>  // NEG_GC_Exp, NEG_GC_InSilico
+    Bound<'py, PyList>, Bound<'py, PyList>,
+Bound<'py, PyList>, Bound<'py, PyList>,
+Bound<'py, PyList>, Bound<'py, PyList>,
+Bound<'py, PyList>, Bound<'py, PyList>
 )> {
 
     // Fonction intégrée pour simuler les multiples appels de votre fonction Python "split_in_silico_exp"
-    let mut emulate_split_in_silico_exp = |df: &Bound<'py, PyAny>, text_true: &str, text_false: &str| -> PyResult<(Bound<'py, PyList>, Bound<'py, PyList>)> {
+    let emulate_split_in_silico_exp = |list: &Bound<'py, PyList>, text_true: &str, text_false: &str| -> PyResult<(Bound<'py, PyList>, Bound<'py, PyList>)> {
         let exp_list = PyList::empty_bound(py);
         let in_silico_list = PyList::empty_bound(py);
-
-        let len: usize = df.call_method0("__len__")?.extract()?;
+        let len = list.len();
         if len > 0 {
-            let dict_list_py = df.call_method1("to_dict", ("records",))?;
-            let records = dict_list_py.downcast::<PyList>()?;
-
-            for i in 0..records.len() {
-                let item = records.get_item(i).unwrap();
+            for item in list.iter() {
                 let dict = item.downcast::<PyDict>()?;
 
                 if let Ok(Some(pred)) = dict.get_item("PREDICTED") {
@@ -207,16 +183,5 @@ pub fn exp_in_silico_splitter<'py>(
     let (neg_lc_exp, neg_lc_in_silico) = emulate_split_in_silico_exp(&neg_lc, "NEG_LC_In_Silico", "NEG_LC_Exp")?;
     let (neg_gc_exp, neg_gc_in_silico) = emulate_split_in_silico_exp(&neg_gc, "NEG_GC_In_Silico", "NEG_GC_Exp")?;
 
-    let columns = pos_lc.getattr("columns")?;
-
-    let out1 = build_dataframe(py, pos_lc_exp, columns.clone())?;
-    let out2 = build_dataframe(py, pos_lc_in_silico, columns.clone())?;
-    let out3 = build_dataframe(py, pos_gc_exp, columns.clone())?;
-    let out4 = build_dataframe(py, pos_gc_in_silico, columns.clone())?;
-    let out5 = build_dataframe(py, neg_lc_exp, columns.clone())?;
-    let out6 = build_dataframe(py, neg_lc_in_silico, columns.clone())?;
-    let out7 = build_dataframe(py, neg_gc_exp, columns.clone())?;
-    let out8 = build_dataframe(py, neg_gc_in_silico, columns)?;
-
-    Ok((out1, out2, out3, out4, out5, out6, out7, out8))
+    Ok((pos_lc_exp, pos_lc_in_silico, pos_gc_exp, pos_gc_in_silico, neg_lc_exp, neg_lc_in_silico, neg_gc_exp, neg_gc_in_silico))
 }

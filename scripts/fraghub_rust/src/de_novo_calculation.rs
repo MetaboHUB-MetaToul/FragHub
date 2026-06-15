@@ -277,23 +277,20 @@ fn process_spectrum_peaks(formula: &str, peaks_list_str: &str, ppm_tol: f64) -> 
 }
 
 #[pyfunction]
-#[pyo3(signature = (spectrum_list_df, parameters_dict_py, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None))]
+#[pyo3(signature = (spectrum_list, parameters_dict_py, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None))]
 pub fn de_novo_calculation_processing<'py>(
     py: Python<'py>,
-    spectrum_list_df: Bound<'py, PyAny>,
+    spectrum_list: &Bound<'py, PyList>,
     parameters_dict_py: Bound<'py, PyDict>,
     progress_callback: Option<PyObject>,
     total_items_callback: Option<PyObject>,
     prefix_callback: Option<PyObject>,
     item_type_callback: Option<PyObject>,
-) -> PyResult<Bound<'py, PyAny>> {
+) -> PyResult<Bound<'py, PyList>> {
 
     if let Some(cb) = &prefix_callback { cb.call1(py, ("Calculating de novo formulas (Rust):",))?; }
     if let Some(cb) = &item_type_callback { cb.call1(py, ("spectra",))?; }
 
-    let original_columns = spectrum_list_df.getattr("columns")?;
-    let dict_list_py = spectrum_list_df.call_method1("to_dict", ("records",))?;
-    let spectrum_list = dict_list_py.downcast::<PyList>()?;
     let total_items = spectrum_list.len();
 
     if let Some(cb) = &total_items_callback { cb.call1(py, (total_items, 0))?; }
@@ -335,10 +332,6 @@ pub fn de_novo_calculation_processing<'py>(
         if let Some(cb) = &progress_callback { cb.call1(py, (processed,))?; }
     }
 
-    let pandas = py.import_bound("pandas")?;
-    let kwargs = PyDict::new_bound(py);
-    kwargs.set_item("columns", original_columns)?;
-
     let py_final_list = PyList::empty_bound(py);
     for meta in rust_spectra {
         let py_dict = PyDict::new_bound(py);
@@ -346,8 +339,5 @@ pub fn de_novo_calculation_processing<'py>(
         py_final_list.append(py_dict)?;
     }
 
-    let args = (py_final_list,);
-    let updated_df = pandas.call_method("DataFrame", args, Some(&kwargs))?;
-
-    Ok(updated_df)
+    Ok(py_final_list)
 }

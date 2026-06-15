@@ -126,7 +126,7 @@ def MAIN(parameters_dict, progress_callback=None, total_items_callback=None, pre
             check_stop_flag()
 
             # CONVERSION EN PANDAS POUR LA SUITE
-            spectrum_list = pd.DataFrame(spectrum_list, columns=ordered_columns).astype(str)
+            # ADIEU PANDAS ! (Le tableau reste pur)
 
             # STEP 7: PUBCHEM
             time.sleep(0.01)
@@ -192,7 +192,7 @@ def MAIN(parameters_dict, progress_callback=None, total_items_callback=None, pre
                 time.sleep(0.01)
                 if step_callback: step_callback("--  WRITING CSV --")
                 time.sleep(0.01)
-                fraghub_rust.writting_csv_processing(POS_LC_df, POS_GC_df, NEG_LC_df, NEG_GC_df, POS_LC_In_Silico_df, POS_GC_In_Silico_df, NEG_LC_In_Silico_df, NEG_GC_In_Silico_df, output_directory, update, progress_callback=progress_callback, total_items_callback=total_items_callback, prefix_callback=prefix_callback, item_type_callback=item_type_callback)
+                fraghub_rust.writting_csv_processing(POS_LC_df, POS_GC_df, NEG_LC_df, NEG_GC_df, POS_LC_In_Silico_df, POS_GC_In_Silico_df, NEG_LC_In_Silico_df, NEG_GC_In_Silico_df, ordered_columns, output_directory, update, progress_callback=progress_callback, total_items_callback=total_items_callback, prefix_callback=prefix_callback, item_type_callback=item_type_callback)
             
             if parameters_dict.get("msp", 0.0) == 1.0:
                 time.sleep(0.01)

@@ -1,21 +1,28 @@
 // src/csv_to_msp.rs
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PyAny};
+use pyo3::types::{PyList, PyDict};
 
-// Fonction utilitaire ultra-rapide pour extraire ou renvoyer "NOT FOUND"
-fn get_str<'py>(dict: &Bound<'py, PyDict>, key: &str) -> String {
+// Fonction pour extraire et nettoyer une valeur depuis le dictionnaire Python
+fn get_string(dict: &Bound<'_, PyDict>, key: &str) -> String {
     if let Ok(Some(val)) = dict.get_item(key) {
-        let s = val.extract::<String>().unwrap_or_else(|_| val.to_string());
-        if !s.trim().is_empty() && s.to_lowercase() != "nan" {
-            return s;
+        if let Ok(s) = val.extract::<String>() {
+            let trimmed = s.trim();
+            if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("nan") {
+                return "NOT FOUND".to_string();
+            }
+            return s.to_string();
+        } else if let Ok(num) = val.extract::<f64>() {
+            if !num.is_nan() { return num.to_string(); }
+        } else if let Ok(num) = val.extract::<i64>() {
+            return num.to_string();
         }
     }
     "NOT FOUND".to_string()
 }
 
-fn dataframe_to_msp<'py>(
+fn list_to_msp<'py>(
     py: Python<'py>,
-    df: &Bound<'py, PyAny>,
+    data_list: &Bound<'py, PyList>,
     name: &str,
     progress_callback: &Option<PyObject>,
     total_items_callback: &Option<PyObject>,
@@ -23,7 +30,7 @@ fn dataframe_to_msp<'py>(
     item_type_callback: &Option<PyObject>,
 ) -> PyResult<Vec<String>> {
 
-    let len: usize = df.call_method0("__len__")?.extract()?;
+    let len = data_list.len();
     if len == 0 {
         return Ok(Vec::new());
     }
@@ -32,60 +39,50 @@ fn dataframe_to_msp<'py>(
     if let Some(cb) = item_type_callback { cb.call1(py, ("rows",))?; }
     if let Some(cb) = total_items_callback { cb.call1(py, (len, 0))?; }
 
-    // Extraction des dictionnaires depuis Pandas
-    let dict_list_py = df.call_method1("to_dict", ("records",))?;
-    let records = dict_list_py.downcast::<PyList>()?;
-
     let mut spectrum_list = Vec::with_capacity(len);
 
     for i in 0..len {
-        let item = records.get_item(i).unwrap();
+        let item = data_list.get_item(i)?;
         let dict = item.downcast::<PyDict>()?;
 
-        // Reconstitution stricte de l'f-string Python de format_comments
         let comments = format!("FILENAME={}; FILEHASH={}; PREDICTED={}; SPLASH={}; SPECTRUMID={}; RESOLUTION={}; SYNON={}; FRAGMENTATIONMODE={}; AVERAGEMASS={}; ENTROPY={}; ONTOLOGIES = \"CLASSYFIRE_SUPERCLASS={}, CLASSYFIRE_CLASS = {}, CLASSYFIRE_SUBCLASS = {}, NPCLASS_PATHWAY = {}, NPCLASS_SUPERCLASS = {}, NPCLASS_CLASS = {}\"",
-                               get_str(&dict, "FILENAME"), get_str(&dict, "FILEHASH"), get_str(&dict, "PREDICTED"), get_str(&dict, "SPLASH"), get_str(&dict, "SPECTRUMID"), get_str(&dict, "RESOLUTION"), get_str(&dict, "SYNON"), get_str(&dict, "FRAGMENTATIONMODE"), get_str(&dict, "AVERAGEMASS"), get_str(&dict, "ENTROPY"),
-                               get_str(&dict, "CLASSYFIRE_SUPERCLASS"), get_str(&dict, "CLASSYFIRE_CLASS"), get_str(&dict, "CLASSYFIRE_SUBCLASS"), get_str(&dict, "NPCLASS_PATHWAY"), get_str(&dict, "NPCLASS_SUPERCLASS"), get_str(&dict, "NPCLASS_CLASS")
+                               get_string(dict, "FILENAME"), get_string(dict, "FILEHASH"), get_string(dict, "PREDICTED"),
+                               get_string(dict, "SPLASH"), get_string(dict, "SPECTRUMID"), get_string(dict, "RESOLUTION"),
+                               get_string(dict, "SYNON"), get_string(dict, "FRAGMENTATIONMODE"), get_string(dict, "AVERAGEMASS"),
+                               get_string(dict, "ENTROPY"), get_string(dict, "CLASSYFIRE_SUPERCLASS"), get_string(dict, "CLASSYFIRE_CLASS"),
+                               get_string(dict, "CLASSYFIRE_SUBCLASS"), get_string(dict, "NPCLASS_PATHWAY"), get_string(dict, "NPCLASS_SUPERCLASS"),
+                               get_string(dict, "NPCLASS_CLASS")
         );
 
-        // Buffer alloué à l'avance pour éviter la fragmentation mémoire
         let mut spectrum = String::with_capacity(1024);
-        spectrum.push_str("NAME: "); spectrum.push_str(&get_str(&dict, "NAME")); spectrum.push('\n');
-        spectrum.push_str("PRECURSORMZ: "); spectrum.push_str(&get_str(&dict, "PRECURSORMZ")); spectrum.push('\n');
-        spectrum.push_str("PRECURSORTYPE: "); spectrum.push_str(&get_str(&dict, "PRECURSORTYPE")); spectrum.push('\n');
-        spectrum.push_str("FORMULA: "); spectrum.push_str(&get_str(&dict, "FORMULA")); spectrum.push('\n');
-        spectrum.push_str("INCHIKEY: "); spectrum.push_str(&get_str(&dict, "INCHIKEY")); spectrum.push('\n');
-        spectrum.push_str("INCHI: "); spectrum.push_str(&get_str(&dict, "INCHI")); spectrum.push('\n');
-        spectrum.push_str("SMILES: "); spectrum.push_str(&get_str(&dict, "SMILES")); spectrum.push('\n');
-        spectrum.push_str("RT: "); spectrum.push_str(&get_str(&dict, "RT")); spectrum.push('\n');
-        spectrum.push_str("IONMODE: "); spectrum.push_str(&get_str(&dict, "IONMODE")); spectrum.push('\n');
-        spectrum.push_str("INSTRUMENTTYPE: "); spectrum.push_str(&get_str(&dict, "INSTRUMENTTYPE")); spectrum.push('\n');
-        spectrum.push_str("INSTRUMENT: "); spectrum.push_str(&get_str(&dict, "INSTRUMENT")); spectrum.push('\n');
-        spectrum.push_str("COLLISIONENERGY: "); spectrum.push_str(&get_str(&dict, "COLLISIONENERGY")); spectrum.push('\n');
-        spectrum.push_str("EXACTMASS: "); spectrum.push_str(&get_str(&dict, "EXACTMASS")); spectrum.push('\n');
-        spectrum.push_str("IONIZATION: "); spectrum.push_str(&get_str(&dict, "IONIZATION")); spectrum.push('\n');
-        spectrum.push_str("MSLEVEL: "); spectrum.push_str(&get_str(&dict, "MSLEVEL")); spectrum.push('\n');
+        spectrum.push_str("NAME: "); spectrum.push_str(&get_string(dict, "NAME")); spectrum.push('\n');
+        spectrum.push_str("PRECURSORMZ: "); spectrum.push_str(&get_string(dict, "PRECURSORMZ")); spectrum.push('\n');
+        spectrum.push_str("PRECURSORTYPE: "); spectrum.push_str(&get_string(dict, "PRECURSORTYPE")); spectrum.push('\n');
+        spectrum.push_str("FORMULA: "); spectrum.push_str(&get_string(dict, "FORMULA")); spectrum.push('\n');
+        spectrum.push_str("INCHIKEY: "); spectrum.push_str(&get_string(dict, "INCHIKEY")); spectrum.push('\n');
+        spectrum.push_str("INCHI: "); spectrum.push_str(&get_string(dict, "INCHI")); spectrum.push('\n');
+        spectrum.push_str("SMILES: "); spectrum.push_str(&get_string(dict, "SMILES")); spectrum.push('\n');
+        spectrum.push_str("RT: "); spectrum.push_str(&get_string(dict, "RT")); spectrum.push('\n');
+        spectrum.push_str("IONMODE: "); spectrum.push_str(&get_string(dict, "IONMODE")); spectrum.push('\n');
+        spectrum.push_str("INSTRUMENTTYPE: "); spectrum.push_str(&get_string(dict, "INSTRUMENTTYPE")); spectrum.push('\n');
+        spectrum.push_str("INSTRUMENT: "); spectrum.push_str(&get_string(dict, "INSTRUMENT")); spectrum.push('\n');
+        spectrum.push_str("COLLISIONENERGY: "); spectrum.push_str(&get_string(dict, "COLLISIONENERGY")); spectrum.push('\n');
+        spectrum.push_str("EXACTMASS: "); spectrum.push_str(&get_string(dict, "EXACTMASS")); spectrum.push('\n');
+        spectrum.push_str("IONIZATION: "); spectrum.push_str(&get_string(dict, "IONIZATION")); spectrum.push('\n');
+        spectrum.push_str("MSLEVEL: "); spectrum.push_str(&get_string(dict, "MSLEVEL")); spectrum.push('\n');
         spectrum.push_str("COMMENT: "); spectrum.push_str(&comments); spectrum.push('\n');
-        spectrum.push_str("NUM PEAKS: "); spectrum.push_str(&get_str(&dict, "NUM PEAKS")); spectrum.push('\n');
+        spectrum.push_str("NUM PEAKS: "); spectrum.push_str(&get_string(dict, "NUM PEAKS")); spectrum.push('\n');
 
-        if let Ok(Some(peaks_val)) = dict.get_item("PEAKS_LIST") {
-            let peaks = peaks_val.extract::<String>().unwrap_or_else(|_| peaks_val.to_string());
-            if peaks != "nan" {
-                spectrum.push_str(&peaks);
-            }
-        }
+        let peaks = get_string(dict, "PEAKS_LIST");
+        if peaks != "NOT FOUND" { spectrum.push_str(&peaks); }
         spectrum.push('\n');
 
         spectrum_list.push(spectrum);
 
-        // Throttle progress_callback pour ne pas freezer l'interface
         if let Some(cb) = progress_callback {
-            if (i + 1) % 1000 == 0 || i == len - 1 {
-                cb.call1(py, (i + 1,))?;
-            }
+            if (i + 1) % 1000 == 0 || i == len - 1 { cb.call1(py, (i + 1,))?; }
         }
     }
-
     Ok(spectrum_list)
 }
 
@@ -93,50 +90,18 @@ fn dataframe_to_msp<'py>(
 #[pyo3(signature = (pos_lc_df, pos_lc_df_insilico, pos_gc_df, pos_gc_df_insilico, neg_lc_df, neg_lc_df_insilico, neg_gc_df, neg_gc_df_insilico, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None))]
 #[allow(clippy::too_many_arguments)]
 pub fn csv_to_msp_processing<'py>(
-    py: Python<'py>,
-    pos_lc_df: Bound<'py, PyAny>,
-    pos_lc_df_insilico: Bound<'py, PyAny>,
-    pos_gc_df: Bound<'py, PyAny>,
-    pos_gc_df_insilico: Bound<'py, PyAny>,
-    neg_lc_df: Bound<'py, PyAny>,
-    neg_lc_df_insilico: Bound<'py, PyAny>,
-    neg_gc_df: Bound<'py, PyAny>,
-    neg_gc_df_insilico: Bound<'py, PyAny>,
-    progress_callback: Option<PyObject>,
-    total_items_callback: Option<PyObject>,
-    prefix_callback: Option<PyObject>,
-    item_type_callback: Option<PyObject>,
-) -> PyResult<(
-    Vec<String>, Vec<String>, Vec<String>, Vec<String>,
-    Vec<String>, Vec<String>, Vec<String>, Vec<String>
-)> {
-
-    // Reproduction du time.sleep(0.1) pour l'UI
+    py: Python<'py>, pos_lc_df: Bound<'py, PyList>, pos_lc_df_insilico: Bound<'py, PyList>, pos_gc_df: Bound<'py, PyList>, pos_gc_df_insilico: Bound<'py, PyList>, neg_lc_df: Bound<'py, PyList>, neg_lc_df_insilico: Bound<'py, PyList>, neg_gc_df: Bound<'py, PyList>, neg_gc_df_insilico: Bound<'py, PyList>, progress_callback: Option<PyObject>, total_items_callback: Option<PyObject>, prefix_callback: Option<PyObject>, item_type_callback: Option<PyObject>,
+) -> PyResult<(Vec<String>, Vec<String>, Vec<String>, Vec<String>, Vec<String>, Vec<String>, Vec<String>, Vec<String>)> {
     let mut sleep = || std::thread::sleep(std::time::Duration::from_millis(100));
 
-    sleep();
-    let pos_lc = dataframe_to_msp(py, &pos_lc_df, "POS_LC", &progress_callback, &total_items_callback, &prefix_callback, &item_type_callback)?;
-
-    sleep();
-    let pos_lc_in = dataframe_to_msp(py, &pos_lc_df_insilico, "POS_LC_insilico", &progress_callback, &total_items_callback, &prefix_callback, &item_type_callback)?;
-
-    sleep();
-    let pos_gc = dataframe_to_msp(py, &pos_gc_df, "POS_GC", &progress_callback, &total_items_callback, &prefix_callback, &item_type_callback)?;
-
-    sleep();
-    let pos_gc_in = dataframe_to_msp(py, &pos_gc_df_insilico, "POS_GC_insilico", &progress_callback, &total_items_callback, &prefix_callback, &item_type_callback)?;
-
-    sleep();
-    let neg_lc = dataframe_to_msp(py, &neg_lc_df, "NEG_LC", &progress_callback, &total_items_callback, &prefix_callback, &item_type_callback)?;
-
-    sleep();
-    let neg_lc_in = dataframe_to_msp(py, &neg_lc_df_insilico, "NEG_LC_insilico", &progress_callback, &total_items_callback, &prefix_callback, &item_type_callback)?;
-
-    sleep();
-    let neg_gc = dataframe_to_msp(py, &neg_gc_df, "NEG_GC", &progress_callback, &total_items_callback, &prefix_callback, &item_type_callback)?;
-
-    sleep();
-    let neg_gc_in = dataframe_to_msp(py, &neg_gc_df_insilico, "NEG_GC_insilico", &progress_callback, &total_items_callback, &prefix_callback, &item_type_callback)?;
+    sleep(); let pos_lc = list_to_msp(py, &pos_lc_df, "POS_LC", &progress_callback, &total_items_callback, &prefix_callback, &item_type_callback)?;
+    sleep(); let pos_lc_in = list_to_msp(py, &pos_lc_df_insilico, "POS_LC_insilico", &progress_callback, &total_items_callback, &prefix_callback, &item_type_callback)?;
+    sleep(); let pos_gc = list_to_msp(py, &pos_gc_df, "POS_GC", &progress_callback, &total_items_callback, &prefix_callback, &item_type_callback)?;
+    sleep(); let pos_gc_in = list_to_msp(py, &pos_gc_df_insilico, "POS_GC_insilico", &progress_callback, &total_items_callback, &prefix_callback, &item_type_callback)?;
+    sleep(); let neg_lc = list_to_msp(py, &neg_lc_df, "NEG_LC", &progress_callback, &total_items_callback, &prefix_callback, &item_type_callback)?;
+    sleep(); let neg_lc_in = list_to_msp(py, &neg_lc_df_insilico, "NEG_LC_insilico", &progress_callback, &total_items_callback, &prefix_callback, &item_type_callback)?;
+    sleep(); let neg_gc = list_to_msp(py, &neg_gc_df, "NEG_GC", &progress_callback, &total_items_callback, &prefix_callback, &item_type_callback)?;
+    sleep(); let neg_gc_in = list_to_msp(py, &neg_gc_df_insilico, "NEG_GC_insilico", &progress_callback, &total_items_callback, &prefix_callback, &item_type_callback)?;
 
     Ok((pos_lc, pos_lc_in, pos_gc, pos_gc_in, neg_lc, neg_lc_in, neg_gc, neg_gc_in))
 }

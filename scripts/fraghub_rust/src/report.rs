@@ -6,23 +6,29 @@ use std::io::Write;
 use std::path::Path;
 
 // Fonction utilitaire pour extraire la taille et les INCHIKEYs uniques d'un DataFrame via PyO3
-fn get_df_stats(df: &Bound<'_, PyAny>) -> PyResult<(usize, usize)> {
-    let length: usize = df.len()?;
-    let mut unique = 0;
 
+fn get_df_stats(list: &Bound<'_, PyAny>) -> PyResult<(usize, usize)> {
+    let length: usize = list.len()?;
+    let mut unique = 0;
     if length > 0 {
-        if let Ok(cols) = df.getattr("columns") {
-            if cols.call_method1("__contains__", ("INCHIKEY",))?.extract::<bool>().unwrap_or(false) {
-                if let Ok(inchikey_col) = df.getattr("INCHIKEY") {
-                    if let Ok(n_unique) = inchikey_col.call_method0("nunique") {
-                        unique = n_unique.extract::<usize>().unwrap_or(0);
+        if let Ok(l) = list.downcast::<PyList>() {
+            let mut unique_set = std::collections::HashSet::new();
+            for item in l.iter() {
+                if let Ok(dict) = item.downcast::<PyDict>() {
+                    if let Ok(Some(val)) = dict.get_item("INCHIKEY") {
+                        let s = val.to_string();
+                        if !s.is_empty() && s.to_lowercase() != "nan" {
+                            unique_set.insert(s);
+                        }
                     }
                 }
             }
+            unique = unique_set.len();
         }
     }
     Ok((length, unique))
 }
+
 
 #[pyfunction]
 #[pyo3(signature = (output_directory, date_str, parameters_dict, deletion_dict, pos_lc, pos_lc_insilico, pos_gc, pos_gc_insilico, neg_lc, neg_lc_insilico, neg_gc, neg_gc_insilico))]
