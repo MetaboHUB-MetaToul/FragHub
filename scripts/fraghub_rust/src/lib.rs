@@ -1,3 +1,4 @@
+// src/lib.rs
 use pyo3::prelude::*;
 
 // Déclaration de vos modules
@@ -7,9 +8,10 @@ pub mod convertors;
 pub mod splash_generator;
 pub mod duplicatas_remover;
 pub mod update_checker;
-pub mod normalizer;       // <-- AJOUTÉ
-pub mod peaks_filters;    // <-- AJOUTÉ
-pub mod spectrum_cleaning;// <-- AJOUTÉ
+pub mod normalizer;
+pub mod peaks_filters;
+pub mod spectrum_cleaning;
+pub mod complete_from_pubchem_datas; // <-- Modifié en pub mod
 
 #[pymodule]
 fn fraghub_rust(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -20,7 +22,7 @@ fn fraghub_rust(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(loading_db::load_keys, m)?)?;
     m.add_function(wrap_pyfunction!(loading_db::load_instrument_tree, m)?)?;
 
-    // --- Partie 2 : Convertisseurs (Étape 1 de parsing_to_dict) ---
+    // --- Partie 2 : Convertisseurs ---
     m.add_function(wrap_pyfunction!(convertors::loaders::generate_file_hash, m)?)?;
     m.add_function(wrap_pyfunction!(convertors::loaders::load_spectrum_list_from_msp, m)?)?;
     m.add_function(wrap_pyfunction!(convertors::loaders::load_spectrum_list_from_mgf, m)?)?;
@@ -34,8 +36,9 @@ fn fraghub_rust(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     // --- Partie 3 : Traitements de masse ---
     m.add_function(wrap_pyfunction!(splash_generator::generate_splash_processing, m)?)?;
     m.add_function(wrap_pyfunction!(duplicatas_remover::remove_duplicatas_processing, m)?)?;
-    m.add_function(wrap_pyfunction!(update_checker::check_for_update_processing, m)?)?; // <-- AJOUTÉ
-    m.add_function(wrap_pyfunction!(spectrum_cleaning::spectrum_cleaning_processing, m)?)?; // <-- AJOUTÉ
+    m.add_function(wrap_pyfunction!(update_checker::check_for_update_processing, m)?)?;
+    m.add_function(wrap_pyfunction!(spectrum_cleaning::spectrum_cleaning_processing, m)?)?;
+    m.add_function(wrap_pyfunction!(complete_from_pubchem_datas::complete_from_pubchem_datas, m)?)?; // <-- EXPOSÉ ICI
 
     Ok(())
 }

@@ -1,6 +1,6 @@
 from scripts.backend_vars import parameters_dict
 from scripts.normalizer.mols_calculation import *
-from scripts.complete_from_pubchem_datas import *
+# Suppression de l'import Python : from scripts.complete_from_pubchem_datas import *
 from scripts.convertors.parsing_to_dict import *
 from scripts.normalize_to_not_found import *
 from scripts.ontologies_completion import *
@@ -15,11 +15,13 @@ from scripts.splitter import *
 from scripts.writers import *
 from scripts.update import *
 from scripts.report import *
+import fraghub_rust # <-- Ajout de l'import Rust
 import traceback
 import time
 import sys
 import os
 import gc # Ajout du Garbage Collector
+import pandas as pd # Ajout pour isinstance
 
 
 class InterruptedError(Exception):
@@ -174,6 +176,10 @@ def MAIN(progress_callback=None, total_items_callback=None, prefix_callback=None
 
         update = False
 
+        # --- CORRECTION CRITIQUE: RETOUR AU FORMAT LISTE POUR RUST ---
+        if isinstance(spectrum_list, pd.DataFrame):
+            spectrum_list = spectrum_list.to_dict('records')
+
         # STEP 4: cleaning spectrums (Multithreaded)
         time.sleep(0.01)
         if step_callback:
@@ -188,7 +194,8 @@ def MAIN(progress_callback=None, total_items_callback=None, prefix_callback=None
 
         check_stop_flag()
 
-        if spectrum_list is not None and not spectrum_list.empty:
+        # CORRECTION: On utilise len() > 0 au lieu de .empty car spectrum_list est une liste standard !
+        if spectrum_list is not None and len(spectrum_list) > 0:
 
             if update_temp:
                 update = True
@@ -221,7 +228,8 @@ def MAIN(progress_callback=None, total_items_callback=None, prefix_callback=None
 
             check_stop_flag()
 
-            if spectrum_list is None or spectrum_list.empty:
+            # CORRECTION: Même chose ici, len() == 0 à la place de .empty
+            if spectrum_list is None or len(spectrum_list) == 0:
                 deletion_callback("-- THERE IS NO SPECTRUMS TO PROCESS AFTER CLEANING, EXITING PROCESS --")
                 time.sleep(0.01)
                 if completion_callback:
@@ -229,6 +237,7 @@ def MAIN(progress_callback=None, total_items_callback=None, prefix_callback=None
                         "--- TOTAL TIME: %s ---" % time.strftime("%H:%M:%S", time.gmtime(time.time() - start_time)))
                 return 0
 
+            # --- TRANSITION LISTE -> PANDAS POUR L'ÉTAPE 5 (Mols Calculation) ---
             spectrum_list = pd.DataFrame(spectrum_list, columns=ordered_columns).astype(str)
 
             # STEP 5: mols derivations and calculations
@@ -252,10 +261,10 @@ def MAIN(progress_callback=None, total_items_callback=None, prefix_callback=None
             if step_callback:
                 step_callback("--  COMPLETING FROM PUBCHEM DATAS --")
             time.sleep(0.01)
-            spectrum_list = complete_from_pubchem_datas(spectrum_list, progress_callback=progress_callback,
-                                                        total_items_callback=total_items_callback,
-                                                        prefix_callback=prefix_callback,
-                                                        item_type_callback=item_type_callback)
+            spectrum_list = fraghub_rust.complete_from_pubchem_datas(spectrum_list, progress_callback=progress_callback,
+                                                                     total_items_callback=total_items_callback,
+                                                                     prefix_callback=prefix_callback,
+                                                                     item_type_callback=item_type_callback)
 
             check_stop_flag()
 
@@ -392,6 +401,9 @@ def MAIN(progress_callback=None, total_items_callback=None, prefix_callback=None
     except InterruptedError:
         if deletion_callback:
             deletion_callback("\n-- PROCESS INTERRUPTED BY USER --")
+        # CHOCOBLAST
+        # CHOCOBLAST
+        # 15 06 2026
 
     except Exception:
         raise
