@@ -14,6 +14,7 @@ pub mod spectrum_cleaning;
 pub mod complete_from_pubchem_datas;
 pub mod ontologies_completion;
 pub mod de_novo_calculation;
+pub mod normalize_to_not_found;
 // <-- Modifié en pub mod
 
 #[pymodule]
@@ -44,6 +45,7 @@ fn fraghub_rust(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(complete_from_pubchem_datas::complete_from_pubchem_datas, m)?)?; // <-- EXPOSÉ ICI
     m.add_function(wrap_pyfunction!(ontologies_completion::ontologies_completion_processing, m)?)?; // <-- NOUVELLE FONCTION EXPOSÉE
     m.add_function(wrap_pyfunction!(de_novo_calculation::de_novo_calculation_processing, m)?)?;
+    m.add_function(wrap_pyfunction!(normalize_to_not_found::normalize_to_not_found_processing, m)?)?; // <-- EXPOSÉ ICI
 
     Ok(())
 }

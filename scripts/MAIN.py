@@ -2,7 +2,7 @@ from scripts.backend_vars import parameters_dict
 from scripts.normalizer.mols_calculation import *
 # Suppression de l'import Python : from scripts.complete_from_pubchem_datas import *
 from scripts.convertors.parsing_to_dict import *
-from scripts.normalize_to_not_found import *
+# Suppression de l'import Python : from scripts.normalize_to_not_found import *
 # Suppression de l'import Python : from scripts.ontologies_completion import *
 from scripts.convertors.csv_to_msp import *
 # Suppression de l'import Python : from scripts.de_novo_calculation import *
@@ -301,7 +301,8 @@ def MAIN(progress_callback=None, total_items_callback=None, prefix_callback=None
 
                 check_stop_flag()
 
-            spectrum_list = normalize_to_not_found(spectrum_list)
+            # APPEL DE LA FONCTION RUST !
+            spectrum_list = fraghub_rust.normalize_to_not_found_processing(spectrum_list)
 
             # STEP 9: SPLITTING
             # -- SPLITTING [POS / NEG] --
