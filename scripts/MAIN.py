@@ -1,6 +1,4 @@
 from scripts.backend_vars import parameters_dict
-from scripts.set_projects import init_project, reset_updates
-import scripts.deletion_report as deletion_report
 import scripts.globals_vars as g_vars
 
 import fraghub_rust # <-- UNIQUE PONT VERS TOUT LE BACKEND !
@@ -81,7 +79,7 @@ def _apply_transformations(inchi_smiles):
                 transforms['AVERAGEMASS'] = ''
     return transforms
 
-def _mols_derivation_and_calculation(CONCATENATE_DF, output_directory, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None):
+def _mols_derivation_and_calculation(CONCATENATE_DF, output_directory, deletion_report, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None):
     if prefix_callback: prefix_callback("derivation and calculation:")
     if item_type_callback: item_type_callback("rows")
 
@@ -137,10 +135,13 @@ def MAIN(progress_callback=None, total_items_callback=None, prefix_callback=None
     output_directory = parameters_dict["output_directory"]
 
     try:
-        if parameters_dict['reset_updates'] == 1.0:
-            reset_updates(output_directory)
+        # --> CRÉATION DE L'OBJET RUST POUR LES RAPPORTS DE SUPPRESSION <--
+        deletion_report = fraghub_rust.DeletionReport()
 
-        init_project(output_directory)
+        if parameters_dict['reset_updates'] == 1.0:
+            fraghub_rust.reset_updates(output_directory)
+
+        fraghub_rust.init_project(output_directory)
 
         start_time = time.time()
 
@@ -294,9 +295,9 @@ def MAIN(progress_callback=None, total_items_callback=None, prefix_callback=None
 
             _pre_compute_rdkit_mass_multithreaded(spectrum_list, prefix_callback=prefix_callback, progress_callback=progress_callback, total_items_callback=total_items_callback, item_type_callback=item_type_callback)
 
-            # Appel direct à Rust
+            # Appel direct à Rust (Passage de L'OBJET deletion_report)
             spectrum_list = fraghub_rust.spectrum_cleaning_processing(
-                spectrum_list, output_directory, ordered_columns, progress_callback=progress_callback,
+                spectrum_list, output_directory, ordered_columns, deletion_report, progress_callback=progress_callback,
                 total_items_callback=total_items_callback, prefix_callback=prefix_callback, item_type_callback=item_type_callback
             )
 
@@ -334,7 +335,8 @@ def MAIN(progress_callback=None, total_items_callback=None, prefix_callback=None
             if step_callback:
                 step_callback("--  MOLS DERIVATION AND MASS CALCULATION --")
             time.sleep(0.01)
-            spectrum_list = _mols_derivation_and_calculation(spectrum_list, output_directory,
+            # Ajout de deletion_report en paramètre
+            spectrum_list = _mols_derivation_and_calculation(spectrum_list, output_directory, deletion_report,
                                                              progress_callback=progress_callback,
                                                              total_items_callback=total_items_callback,
                                                              prefix_callback=prefix_callback,
@@ -491,7 +493,8 @@ def MAIN(progress_callback=None, total_items_callback=None, prefix_callback=None
             # STEP 12: GENERATE REPORT VIA RUST
             current_datetime = datetime.now().strftime("%d_%m_%Y__%H_%M_%S")
             fraghub_rust.generate_report_processing(
-                output_directory, current_datetime, parameters_dict, deletion_report.__dict__,
+                output_directory, current_datetime, parameters_dict,
+                deletion_report.to_dict(), # <-- ENVOI DU DICO PROPRE À RUST
                 POS_LC_df, POS_LC_In_Silico_df, POS_GC_df, POS_GC_In_Silico_df,
                 NEG_LC_df, NEG_LC_In_Silico_df, NEG_GC_df, NEG_GC_In_Silico_df
             )
@@ -509,9 +512,6 @@ def MAIN(progress_callback=None, total_items_callback=None, prefix_callback=None
     except InterruptedError:
         if deletion_callback:
             deletion_callback("\n-- PROCESS INTERRUPTED BY USER --")
-        # CHOCOBLAST
-        # CHOCOBLAST
-        # 15 06 2026
 
     except Exception:
         raise

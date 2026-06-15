@@ -1,6 +1,6 @@
 // src/spectrum_cleaning.rs
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList};
+use pyo3::types::{PyDict, PyList, PyAny};
 use rayon::prelude::*;
 use std::collections::HashMap;
 use std::fs;
@@ -16,12 +16,13 @@ struct RustSpectrum {
 }
 
 #[pyfunction]
-#[pyo3(signature = (spectrum_list, output_directory, ordered_columns, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None))]
+#[pyo3(signature = (spectrum_list, output_directory, ordered_columns, deletion_report_obj, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None))]
 pub fn spectrum_cleaning_processing<'py>(
     py: Python<'py>,
     spectrum_list: Bound<'py, PyList>,
     output_directory: String,
     ordered_columns: Vec<String>,
+    deletion_report_obj: Bound<'py, PyAny>, // <-- NOUVEL ARGUMENT : L'objet DeletionReport !
     progress_callback: Option<PyObject>,
     total_items_callback: Option<PyObject>,
     prefix_callback: Option<PyObject>,
@@ -199,10 +200,9 @@ pub fn spectrum_cleaning_processing<'py>(
         if let Some(cb) = &progress_callback { cb.call1(py, (processed,))?; }
     }
 
-    // 3. Mise à jour de deletion_report.py EN DIRECT !
-    let del_report = py.import_bound("scripts.deletion_report")?;
+    // 3. Mise à jour de L'OBJET RUST DeletionReport EN DIRECT !
     for (reason, group) in &deleted_spectra {
-        let count = group.len() as i32;
+        let count = group.len() as usize;
         let py_var = match reason.as_str() {
             "spectrum deleted because peaks list is empty" => "no_peaks_list",
             "spectrum deleted because precursor mz is less than or equal to zero." => "no_precursor_mz",
@@ -218,8 +218,8 @@ pub fn spectrum_cleaning_processing<'py>(
             "spectrum deleted because peaks list does not contain minimum number of high peaks required according to the value choiced by the user" => "minimum_high_peaks_not_requiered",
             _ => continue,
         };
-        let current: i32 = del_report.getattr(py_var)?.extract()?;
-        del_report.setattr(py_var, current + count)?;
+        let current: usize = deletion_report_obj.getattr(py_var)?.extract()?;
+        deletion_report_obj.setattr(py_var, current + count)?;
     }
 
     // 4. Écriture des CSV de suppression
