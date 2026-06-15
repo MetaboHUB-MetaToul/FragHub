@@ -15,7 +15,9 @@ pub mod complete_from_pubchem_datas;
 pub mod ontologies_completion;
 pub mod de_novo_calculation;
 pub mod normalize_to_not_found;
-// <-- Modifié en pub mod
+pub mod splitter;
+pub mod csv_to_msp;
+pub mod writers;
 
 #[pymodule]
 fn fraghub_rust(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -42,10 +44,21 @@ fn fraghub_rust(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(duplicatas_remover::remove_duplicatas_processing, m)?)?;
     m.add_function(wrap_pyfunction!(update_checker::check_for_update_processing, m)?)?;
     m.add_function(wrap_pyfunction!(spectrum_cleaning::spectrum_cleaning_processing, m)?)?;
-    m.add_function(wrap_pyfunction!(complete_from_pubchem_datas::complete_from_pubchem_datas, m)?)?; // <-- EXPOSÉ ICI
-    m.add_function(wrap_pyfunction!(ontologies_completion::ontologies_completion_processing, m)?)?; // <-- NOUVELLE FONCTION EXPOSÉE
+    m.add_function(wrap_pyfunction!(complete_from_pubchem_datas::complete_from_pubchem_datas, m)?)?;
+    m.add_function(wrap_pyfunction!(ontologies_completion::ontologies_completion_processing, m)?)?;
     m.add_function(wrap_pyfunction!(de_novo_calculation::de_novo_calculation_processing, m)?)?;
-    m.add_function(wrap_pyfunction!(normalize_to_not_found::normalize_to_not_found_processing, m)?)?; // <-- EXPOSÉ ICI
+    m.add_function(wrap_pyfunction!(normalize_to_not_found::normalize_to_not_found_processing, m)?)?;
+
+    // --- Les oublis sont rajoutés ici ! ---
+    m.add_function(wrap_pyfunction!(splitter::split_pos_neg, m)?)?;
+    m.add_function(wrap_pyfunction!(splitter::split_LC_GC, m)?)?;
+    m.add_function(wrap_pyfunction!(splitter::exp_in_silico_splitter, m)?)?;
+
+    m.add_function(wrap_pyfunction!(csv_to_msp::csv_to_msp_processing, m)?)?;
+
+    m.add_function(wrap_pyfunction!(writers::writting_msp_processing, m)?)?;
+    m.add_function(wrap_pyfunction!(writers::writting_csv_processing, m)?)?;
+    m.add_function(wrap_pyfunction!(writers::writting_json_processing, m)?)?;
 
     Ok(())
 }

@@ -4,15 +4,15 @@ from scripts.normalizer.mols_calculation import *
 from scripts.convertors.parsing_to_dict import *
 # Suppression de l'import Python : from scripts.normalize_to_not_found import *
 # Suppression de l'import Python : from scripts.ontologies_completion import *
-from scripts.convertors.csv_to_msp import *
+# Suppression de l'import Python : from scripts.convertors.csv_to_msp import *
 # Suppression de l'import Python : from scripts.de_novo_calculation import *
 from scripts.spectrum_normalizer import *
 from scripts.duplicatas_remover import *
 from scripts.splash_generator import *
 from scripts.set_projects import *
 import scripts.deletion_report
-from scripts.splitter import *
-from scripts.writers import *
+# Suppression de l'import Python : from scripts.splitter import *
+# Suppression de l'import Python : from scripts.writers import *
 from scripts.update import *
 from scripts.report import *
 import fraghub_rust # <-- Ajout de l'import Rust
@@ -310,9 +310,10 @@ def MAIN(progress_callback=None, total_items_callback=None, prefix_callback=None
             if step_callback:
                 step_callback("--  SPLITTING [POS / NEG] --")
             time.sleep(0.01)
-            POS_df, NEG_df = split_pos_neg(spectrum_list, progress_callback=progress_callback,
-                                           total_items_callback=total_items_callback, prefix_callback=prefix_callback,
-                                           item_type_callback=item_type_callback)
+            # APPEL DE LA FONCTION RUST !
+            POS_df, NEG_df = fraghub_rust.split_pos_neg(spectrum_list, progress_callback=progress_callback,
+                                                        total_items_callback=total_items_callback, prefix_callback=prefix_callback,
+                                                        item_type_callback=item_type_callback)
             check_stop_flag()
 
             # -- SPLITTING [LC / GC] --
@@ -320,11 +321,12 @@ def MAIN(progress_callback=None, total_items_callback=None, prefix_callback=None
             if step_callback:
                 step_callback("--  SPLITTING [LC / GC] --")
             time.sleep(0.01)
-            POS_LC_df, POS_GC_df, NEG_LC_df, NEG_GC_df = split_LC_GC(POS_df, NEG_df,
-                                                                     progress_callback=progress_callback,
-                                                                     total_items_callback=total_items_callback,
-                                                                     prefix_callback=prefix_callback,
-                                                                     item_type_callback=item_type_callback)
+            # APPEL DE LA FONCTION RUST !
+            POS_LC_df, POS_GC_df, NEG_LC_df, NEG_GC_df = fraghub_rust.split_LC_GC(POS_df, NEG_df,
+                                                                                  progress_callback=progress_callback,
+                                                                                  total_items_callback=total_items_callback,
+                                                                                  prefix_callback=prefix_callback,
+                                                                                  item_type_callback=item_type_callback)
 
             del POS_df
             del NEG_df
@@ -335,7 +337,8 @@ def MAIN(progress_callback=None, total_items_callback=None, prefix_callback=None
             if step_callback:
                 step_callback("--  SPLITTING [EXP / In-Silico] --")
             time.sleep(0.01)
-            POS_LC_df, POS_LC_In_Silico_df, POS_GC_df, POS_GC_In_Silico_df, NEG_LC_df, NEG_LC_In_Silico_df, NEG_GC_df, NEG_GC_In_Silico_df = exp_in_silico_splitter(
+            # APPEL DE LA FONCTION RUST !
+            POS_LC_df, POS_LC_In_Silico_df, POS_GC_df, POS_GC_In_Silico_df, NEG_LC_df, NEG_LC_In_Silico_df, NEG_GC_df, NEG_GC_In_Silico_df = fraghub_rust.exp_in_silico_splitter(
                 POS_LC_df, POS_GC_df, NEG_LC_df, NEG_GC_df, progress_callback=progress_callback,
                 total_items_callback=total_items_callback, prefix_callback=prefix_callback,
                 item_type_callback=item_type_callback)
@@ -347,7 +350,8 @@ def MAIN(progress_callback=None, total_items_callback=None, prefix_callback=None
                 if step_callback:
                     step_callback("--  CONVERTING CSV TO MSP --")
                 time.sleep(0.01)
-                POS_LC, POS_LC_insilico, POS_GC, POS_GC_insilico, NEG_LC, NEG_LC_insilico, NEG_GC, NEG_GC_insilico = csv_to_msp(
+                # APPEL DE LA FONCTION RUST !
+                POS_LC, POS_LC_insilico, POS_GC, POS_GC_insilico, NEG_LC, NEG_LC_insilico, NEG_GC, NEG_GC_insilico = fraghub_rust.csv_to_msp_processing(
                     POS_LC_df, POS_LC_In_Silico_df, POS_GC_df, POS_GC_In_Silico_df, NEG_LC_df, NEG_LC_In_Silico_df,
                     NEG_GC_df, NEG_GC_In_Silico_df, progress_callback=progress_callback,
                     total_items_callback=total_items_callback, prefix_callback=prefix_callback,
@@ -361,10 +365,13 @@ def MAIN(progress_callback=None, total_items_callback=None, prefix_callback=None
                 if step_callback:
                     step_callback("--  WRITING CSV --")
                 time.sleep(0.01)
-                writting_csv(POS_LC_df, POS_GC_df, NEG_LC_df, NEG_GC_df, POS_LC_In_Silico_df, POS_GC_In_Silico_df,
-                             NEG_LC_In_Silico_df, NEG_GC_In_Silico_df, output_directory, update,
-                             progress_callback=progress_callback, total_items_callback=total_items_callback,
-                             prefix_callback=prefix_callback, item_type_callback=item_type_callback)
+                # APPEL DE LA FONCTION RUST !
+                fraghub_rust.writting_csv_processing(
+                    POS_LC_df, POS_GC_df, NEG_LC_df, NEG_GC_df, POS_LC_In_Silico_df, POS_GC_In_Silico_df,
+                    NEG_LC_In_Silico_df, NEG_GC_In_Silico_df, output_directory, update,
+                    progress_callback=progress_callback, total_items_callback=total_items_callback,
+                    prefix_callback=prefix_callback, item_type_callback=item_type_callback
+                )
 
             check_stop_flag()
 
@@ -373,10 +380,13 @@ def MAIN(progress_callback=None, total_items_callback=None, prefix_callback=None
                 if step_callback:
                     step_callback("--  WRITING MSP --")
                 time.sleep(0.01)
-                writting_msp(POS_LC, POS_LC_insilico, POS_GC, POS_GC_insilico, NEG_LC, NEG_LC_insilico, NEG_GC,
-                             NEG_GC_insilico, output_directory, update, progress_callback=progress_callback,
-                             total_items_callback=total_items_callback, prefix_callback=prefix_callback,
-                             item_type_callback=item_type_callback)
+                # APPEL DE LA FONCTION RUST !
+                fraghub_rust.writting_msp_processing(
+                    POS_LC, POS_LC_insilico, POS_GC, POS_GC_insilico, NEG_LC, NEG_LC_insilico, NEG_GC,
+                    NEG_GC_insilico, output_directory, update, progress_callback=progress_callback,
+                    total_items_callback=total_items_callback, prefix_callback=prefix_callback,
+                    item_type_callback=item_type_callback
+                )
 
             check_stop_flag()
 
@@ -385,10 +395,13 @@ def MAIN(progress_callback=None, total_items_callback=None, prefix_callback=None
                 if step_callback:
                     step_callback("--  WRITING JSON --")
                 time.sleep(0.01)
-                writting_json(update, POS_LC_df, POS_GC_df, NEG_LC_df, NEG_GC_df, POS_LC_In_Silico_df, POS_GC_In_Silico_df,
-                              NEG_LC_In_Silico_df, NEG_GC_In_Silico_df, output_directory,
-                              progress_callback=progress_callback, total_items_callback=total_items_callback,
-                              prefix_callback=prefix_callback, item_type_callback=item_type_callback)
+                # APPEL DE LA FONCTION RUST !
+                fraghub_rust.writting_json_processing(
+                    update, POS_LC_df, POS_GC_df, NEG_LC_df, NEG_GC_df, POS_LC_In_Silico_df, POS_GC_In_Silico_df,
+                    NEG_LC_In_Silico_df, NEG_GC_In_Silico_df, output_directory,
+                    progress_callback=progress_callback, total_items_callback=total_items_callback,
+                    prefix_callback=prefix_callback, item_type_callback=item_type_callback
+                )
 
             deletion_callback(
                 f"Total deletions: {sum([scripts.deletion_report.duplicatas_removed, scripts.deletion_report.previously_cleaned, scripts.deletion_report.no_peaks_list, scripts.deletion_report.no_smiles_no_inchi_no_inchikey, scripts.deletion_report.no_precursor_mz, scripts.deletion_report.low_entropy_score, scripts.deletion_report.minimum_peaks_not_requiered, scripts.deletion_report.all_peaks_above_precursor_mz, scripts.deletion_report.no_peaks_in_mz_range, scripts.deletion_report.minimum_high_peaks_not_requiered])}"
