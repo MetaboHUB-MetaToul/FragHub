@@ -2,7 +2,7 @@
 
 use pyo3::prelude::*;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read};
+use std::io::{BufRead, BufReader};
 use std::path::Path;
 use sha2::{Sha256, Digest};
 use regex::Regex;
@@ -49,43 +49,6 @@ pub fn generate_file_hash(file_path: &str) -> String {
     }
 }
 
-fn count_json_objects(path: &str) -> std::io::Result<usize> {
-    let file = File::open(path)?;
-    let mut reader = BufReader::with_capacity(1024 * 1024, file);
-    let mut count = 0;
-    let mut depth = 0;
-    let mut in_string = false;
-    let mut escaped = false;
-
-    loop {
-        let buf = reader.fill_buf()?;
-        if buf.is_empty() { break; }
-        let length = buf.len();
-
-        for &b in buf {
-            if in_string {
-                if escaped { escaped = false; }
-                else if b == b'\\' { escaped = true; }
-                else if b == b'"' { in_string = false; }
-            } else {
-                match b {
-                    b'"' => in_string = true,
-                    b'{' => depth += 1,
-                    b'}' => {
-                        if depth > 0 {
-                            depth -= 1;
-                            if depth == 0 { count += 1; }
-                        }
-                    }
-                    _ => {}
-                }
-            }
-        }
-        reader.consume(length);
-    }
-    Ok(count)
-}
-
 // ----------------------------------------------------------------------
 // RUST NATIVE JSON LOADER (Array Format - GNPS)
 // ----------------------------------------------------------------------
@@ -103,21 +66,25 @@ pub fn load_spectrum_list_json(
     let path = Path::new(json_file_path);
     let filename = path.file_name().unwrap_or_default().to_string_lossy().to_string();
 
-    let total = count_json_objects(json_file_path).unwrap_or(0);
-    if let Some(cb) = &total_items_callback { let _ = cb.call1(py, (total, 0)); }
+    let total_bytes = std::fs::metadata(json_file_path).map(|m| m.len()).unwrap_or(0);
+    let total_mb = std::cmp::max(1, total_bytes / (1024 * 1024));
+
+    if let Some(cb) = &total_items_callback { let _ = cb.call1(py, (total_mb, 0)); }
     if let Some(cb) = &prefix_callback { let _ = cb.call1(py, (format!("loading [{}]:", filename),)); }
-    if let Some(cb) = &item_type_callback { let _ = cb.call1(py, ("spectra",)); }
+    if let Some(cb) = &item_type_callback { let _ = cb.call1(py, ("MB",)); }
 
     let file = File::open(json_file_path)?;
-    let mut reader = BufReader::with_capacity(1024 * 1024, file);
-    let mut spectrum_list = Vec::with_capacity(total);
+    let mut reader = BufReader::with_capacity(1024 * 1024 * 4, file);
+    let mut spectrum_list = Vec::new();
 
     let mut depth = 0;
     let mut in_string = false;
     let mut escaped = false;
     let mut buffer = Vec::with_capacity(65536);
-    let mut processed = 0;
+    let mut total_consumed: u64 = 0;
     let mut last_update = Instant::now();
+
+    let injection_prefix = format!(r#"{{"filename":"{}","filehash":"{}","#, filename, file_hash);
 
     loop {
         let buf = match reader.fill_buf() {
@@ -144,14 +111,18 @@ pub fn load_spectrum_list_json(
                         if depth > 0 {
                             depth -= 1;
                             if depth == 0 {
-                                let s = String::from_utf8_lossy(&buffer);
-                                let injected = s.replacen("{", &format!(r#"{{"filename":"{}","filehash":"{}","#, filename, file_hash), 1);
-                                spectrum_list.push(injected);
+                                let s = std::str::from_utf8(&buffer).unwrap_or("");
+                                if s.starts_with('{') {
+                                    let mut injected = String::with_capacity(injection_prefix.len() + s.len());
+                                    injected.push_str(&injection_prefix);
+                                    injected.push_str(&s[1..]);
+                                    spectrum_list.push(injected);
+                                }
                                 buffer.clear();
-                                processed += 1;
 
-                                if last_update.elapsed() >= Duration::from_millis(50) || processed == total {
-                                    if let Some(cb) = &progress_callback { let _ = cb.call1(py, (processed,)); }
+                                if last_update.elapsed() >= Duration::from_millis(50) {
+                                    let current_mb = (total_consumed + consumed as u64) / (1024 * 1024);
+                                    if let Some(cb) = &progress_callback { let _ = cb.call1(py, (current_mb,)); }
                                     py.allow_threads(|| std::thread::sleep(Duration::from_millis(1)));
                                     last_update = Instant::now();
                                 }
@@ -162,8 +133,12 @@ pub fn load_spectrum_list_json(
                 }
             }
         }
+        total_consumed += consumed as u64;
         reader.consume(consumed);
     }
+    
+    if let Some(cb) = &progress_callback { let _ = cb.call1(py, (total_mb,)); }
+
     Ok(RawJsonSpectra { data: spectrum_list })
 }
 
@@ -184,43 +159,38 @@ pub fn load_spectrum_list_json_2(
     let path = Path::new(json_file_path);
     let filename = path.file_name().unwrap_or_default().to_string_lossy().to_string();
 
-    let file = File::open(json_file_path)?;
-    let mut reader = BufReader::with_capacity(1024 * 1024, file);
-    let mut total = 0;
-    let mut buf = [0u8; 65536];
+    let total_bytes = std::fs::metadata(json_file_path).map(|m| m.len()).unwrap_or(0);
+    let total_mb = std::cmp::max(1, total_bytes / (1024 * 1024));
 
-    loop {
-        let bytes_read = reader.read(&mut buf)?;
-        if bytes_read == 0 { break; }
-        for &b in &buf[..bytes_read] {
-            if b == b'\n' { total += 1; }
-        }
-    }
-
-    if let Some(cb) = &total_items_callback { let _ = cb.call1(py, (total, 0)); }
+    if let Some(cb) = &total_items_callback { let _ = cb.call1(py, (total_mb, 0)); }
     if let Some(cb) = &prefix_callback { let _ = cb.call1(py, (format!("loading [{}]:", filename),)); }
-    if let Some(cb) = &item_type_callback { let _ = cb.call1(py, ("spectra",)); }
+    if let Some(cb) = &item_type_callback { let _ = cb.call1(py, ("MB",)); }
 
-    let file2 = File::open(json_file_path)?;
-    let mut reader2 = BufReader::with_capacity(1024 * 1024, file2);
-    let mut spectrum_list = Vec::with_capacity(total);
-    let mut line = String::new();
-    let mut processed = 0;
+    let file = File::open(json_file_path)?;
+    let mut reader = BufReader::with_capacity(1024 * 1024 * 4, file);
+    let mut spectrum_list = Vec::new();
+    let mut line = String::with_capacity(65536);
+    let mut total_consumed: u64 = 0;
     let mut last_update = Instant::now();
+
+    let injection_prefix = format!(r#"{{"filename":"{}","filehash":"{}","#, filename, file_hash);
 
     loop {
         line.clear();
-        match reader2.read_line(&mut line) {
+        match reader.read_line(&mut line) {
             Ok(0) => break,
-            Ok(_) => {
+            Ok(bytes_read) => {
+                total_consumed += bytes_read as u64;
                 let trimmed = line.trim();
                 if !trimmed.is_empty() && trimmed.starts_with('{') {
-                    let injected = trimmed.replacen("{", &format!(r#"{{"filename":"{}","filehash":"{}","#, filename, file_hash), 1);
+                    let mut injected = String::with_capacity(injection_prefix.len() + trimmed.len());
+                    injected.push_str(&injection_prefix);
+                    injected.push_str(&trimmed[1..]);
                     spectrum_list.push(injected);
 
-                    processed += 1;
-                    if last_update.elapsed() >= Duration::from_millis(50) || processed == total {
-                        if let Some(cb) = &progress_callback { let _ = cb.call1(py, (processed,)); }
+                    if last_update.elapsed() >= Duration::from_millis(50) {
+                        let current_mb = total_consumed / (1024 * 1024);
+                        if let Some(cb) = &progress_callback { let _ = cb.call1(py, (current_mb,)); }
                         py.allow_threads(|| std::thread::sleep(Duration::from_millis(1)));
                         last_update = Instant::now();
                     }
@@ -229,6 +199,9 @@ pub fn load_spectrum_list_json_2(
             Err(e) => return Err(pyo3::exceptions::PyIOError::new_err(e.to_string())),
         }
     }
+    
+    if let Some(cb) = &progress_callback { let _ = cb.call1(py, (total_mb,)); }
+    
     Ok(RawJsonSpectra { data: spectrum_list })
 }
 
@@ -244,49 +217,47 @@ pub fn load_spectrum_list_from_msp(
     total_items_callback: Option<PyObject>,
     prefix_callback: Option<PyObject>,
     item_type_callback: Option<PyObject>,
-) -> PyResult<RawMspSpectra> { // RETOURNE L'OBJET NATIF MSP
+) -> PyResult<RawMspSpectra> { 
     let file_hash = generate_file_hash(msp_file_path);
     let path = Path::new(msp_file_path);
     let filename = path.file_name().unwrap_or_default().to_string_lossy().to_string();
 
-    let file = File::open(msp_file_path)?;
-    let mut reader = BufReader::new(&file);
+    let total_bytes = std::fs::metadata(msp_file_path).map(|m| m.len()).unwrap_or(0);
+    let total_mb = std::cmp::max(1, total_bytes / (1024 * 1024));
 
-    let mut num_spectra = 0;
-    let mut line = String::new();
-    while reader.read_line(&mut line)? > 0 {
-        if line.trim().is_empty() { num_spectra += 1; }
-        line.clear();
-    }
-
-    if let Some(cb) = &total_items_callback { let _ = cb.call1(py, (num_spectra, 0)); }
+    if let Some(cb) = &total_items_callback { let _ = cb.call1(py, (total_mb, 0)); }
     if let Some(cb) = &prefix_callback { let _ = cb.call1(py, (format!("loading [{}]:", filename),)); }
-    if let Some(cb) = &item_type_callback { let _ = cb.call1(py, ("spectra",)); }
+    if let Some(cb) = &item_type_callback { let _ = cb.call1(py, ("MB",)); }
 
     let file = File::open(msp_file_path)?;
-    let mut reader = BufReader::new(file);
+    let mut reader = BufReader::with_capacity(1024 * 1024 * 4, file);
     let mut spectrum_list = Vec::new();
     let mut buffer = vec![format!("FILENAME: {}", filename)];
-    let mut processed_spectra = 0;
+    let mut total_consumed: u64 = 0;
     let mut last_update = Instant::now();
 
     let re = Regex::new(r"(?i)FILENAME: .*\n").unwrap();
     let replacement = format!("FILENAME: {}\nFILEHASH: {}\n", filename, file_hash);
 
-    line.clear();
-    while reader.read_line(&mut line)? > 0 {
+    let mut line = String::with_capacity(1024);
+    loop {
+        line.clear();
+        let bytes_read = reader.read_line(&mut line)?;
+        if bytes_read == 0 { break; }
+        total_consumed += bytes_read as u64;
+
         let trimmed = line.trim();
         if trimmed.is_empty() {
             if buffer.len() > 1 {
                 let spectrum = buffer.join("\n") + "\n";
                 let replaced = re.replace(&spectrum, replacement.as_str()).to_string();
                 spectrum_list.push(replaced.trim_end().to_string());
-                buffer = vec![format!("FILENAME: {}", filename)];
+                buffer.clear();
+                buffer.push(format!("FILENAME: {}", filename));
 
-                processed_spectra += 1;
-
-                if last_update.elapsed() >= Duration::from_millis(50) || processed_spectra == num_spectra {
-                    if let Some(cb) = &progress_callback { let _ = cb.call1(py, (processed_spectra,)); }
+                if last_update.elapsed() >= Duration::from_millis(50) {
+                    let current_mb = total_consumed / (1024 * 1024);
+                    if let Some(cb) = &progress_callback { let _ = cb.call1(py, (current_mb,)); }
                     py.allow_threads(|| std::thread::sleep(Duration::from_millis(1)));
                     last_update = Instant::now();
                 }
@@ -294,7 +265,6 @@ pub fn load_spectrum_list_from_msp(
         } else {
             buffer.push(trimmed.to_string());
         }
-        line.clear();
     }
 
     if buffer.len() > 1 {
@@ -302,6 +272,8 @@ pub fn load_spectrum_list_from_msp(
         let replaced = re.replace(&spectrum, replacement.as_str()).to_string();
         spectrum_list.push(replaced.trim_end().to_string());
     }
+
+    if let Some(cb) = &progress_callback { let _ = cb.call1(py, (total_mb,)); }
 
     Ok(RawMspSpectra { data: spectrum_list })
 }
@@ -323,44 +295,42 @@ pub fn load_spectrum_list_from_mgf(
     let path = Path::new(mgf_file_path);
     let filename = path.file_name().unwrap_or_default().to_string_lossy().to_string();
 
-    let file = File::open(mgf_file_path)?;
-    let mut reader = BufReader::new(&file);
+    let total_bytes = std::fs::metadata(mgf_file_path).map(|m| m.len()).unwrap_or(0);
+    let total_mb = std::cmp::max(1, total_bytes / (1024 * 1024));
 
-    let mut num_spectra = 0;
-    let mut line = String::new();
-    while reader.read_line(&mut line)? > 0 {
-        if line.trim() == "END IONS" { num_spectra += 1; }
-        line.clear();
-    }
-
-    if let Some(cb) = &total_items_callback { let _ = cb.call1(py, (num_spectra, 0)); }
-    if let Some(cb) = &prefix_callback { let _ = cb.call1(py, (format!("Loading [{}]:", filename),)); }
-    if let Some(cb) = &item_type_callback { let _ = cb.call1(py, ("spectra",)); }
+    if let Some(cb) = &total_items_callback { let _ = cb.call1(py, (total_mb, 0)); }
+    if let Some(cb) = &prefix_callback { let _ = cb.call1(py, (format!("loading [{}]:", filename),)); }
+    if let Some(cb) = &item_type_callback { let _ = cb.call1(py, ("MB",)); }
 
     let file = File::open(mgf_file_path)?;
-    let mut reader = BufReader::new(file);
+    let mut reader = BufReader::with_capacity(1024 * 1024 * 4, file);
     let mut spectrum_list = Vec::new();
     let mut buffer = vec![format!("FILENAME={}", filename)];
-    let mut processed_items = 0;
+    let mut total_consumed: u64 = 0;
     let mut last_update = Instant::now();
 
     let re = Regex::new(r"(?i)FILENAME=.*\n").unwrap();
     let replacement = format!("FILENAME={}\nFILEHASH={}\n", filename, file_hash);
 
-    line.clear();
-    while reader.read_line(&mut line)? > 0 {
+    let mut line = String::with_capacity(1024);
+    loop {
+        line.clear();
+        let bytes_read = reader.read_line(&mut line)?;
+        if bytes_read == 0 { break; }
+        total_consumed += bytes_read as u64;
+
         let trimmed = line.trim();
         if trimmed == "END IONS" {
             if !buffer.is_empty() {
                 let spectrum = buffer.join("\n") + "\n";
                 let replaced = re.replace(&spectrum, replacement.as_str()).to_string();
                 spectrum_list.push(replaced.trim_end().to_string());
-                buffer = vec![format!("FILENAME={}", filename)];
+                buffer.clear();
+                buffer.push(format!("FILENAME={}", filename));
 
-                processed_items += 1;
-
-                if last_update.elapsed() >= Duration::from_millis(50) || processed_items == num_spectra {
-                    if let Some(cb) = &progress_callback { let _ = cb.call1(py, (processed_items,)); }
+                if last_update.elapsed() >= Duration::from_millis(50) {
+                    let current_mb = total_consumed / (1024 * 1024);
+                    if let Some(cb) = &progress_callback { let _ = cb.call1(py, (current_mb,)); }
                     py.allow_threads(|| std::thread::sleep(Duration::from_millis(1)));
                     last_update = Instant::now();
                 }
@@ -368,8 +338,9 @@ pub fn load_spectrum_list_from_mgf(
         } else {
             buffer.push(trimmed.to_string());
         }
-        line.clear();
     }
+
+    if let Some(cb) = &progress_callback { let _ = cb.call1(py, (total_mb,)); }
 
     Ok(spectrum_list)
 }
