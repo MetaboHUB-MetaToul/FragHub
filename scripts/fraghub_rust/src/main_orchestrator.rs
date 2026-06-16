@@ -1,3 +1,4 @@
+// src/main_orchestrator.rs
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 use pyo3::exceptions::PyException;
@@ -15,7 +16,10 @@ use crate::complete_from_pubchem_datas::complete_from_pubchem_datas;
 use crate::ontologies_completion::ontologies_completion_processing;
 use crate::de_novo_calculation::de_novo_calculation_processing;
 use crate::normalize_to_not_found::normalize_to_not_found_processing;
-use crate::splitter::{split_pos_neg, split_lc_gc, exp_in_silico_splitter};
+
+// ---> IMPORT MODIFIÉ ICI <---
+use crate::splitter::master_splitter;
+
 use crate::csv_to_msp::csv_to_msp_processing;
 use crate::writers::{writting_csv_processing, writting_msp_processing, writting_json_processing};
 use crate::report::generate_report_processing;
@@ -218,38 +222,29 @@ pub fn main_orchestrator(
 
         spectrum_list = normalize_to_not_found_processing(py, spectrum_list)?;
 
+        // ---> STEP 10 MODIFIÉ ICI <---
         // STEP 10: SPLITTING
         py.allow_threads(|| { std::thread::sleep(std::time::Duration::from_millis(10)); });
-        if let Some(cb) = &step_callback { cb.call1(py, ("--  SPLITTING [POS / NEG] --",))?; }
+        if let Some(cb) = &step_callback { cb.call1(py, ("--  SPLITTING SPECTRUMS --",))?; }
         py.allow_threads(|| { std::thread::sleep(std::time::Duration::from_millis(10)); });
 
-        let tuple_pn = split_pos_neg(py, &spectrum_list, progress_callback.clone(), total_items_callback.clone(), prefix_callback.clone(), item_type_callback.clone())?;
-        let pos_df = tuple_pn.0;
-        let neg_df = tuple_pn.1;
+        let tuple_split = master_splitter(
+            py,
+            &spectrum_list,
+            progress_callback.clone(),
+            total_items_callback.clone(),
+            prefix_callback.clone(),
+            item_type_callback.clone()
+        )?;
 
-        py.allow_threads(|| { std::thread::sleep(std::time::Duration::from_millis(10)); });
-        if let Some(cb) = &step_callback { cb.call1(py, ("--  SPLITTING [LC / GC] --",))?; }
-        py.allow_threads(|| { std::thread::sleep(std::time::Duration::from_millis(10)); });
-
-        let tuple_lcgc = split_lc_gc(py, &pos_df, &neg_df, progress_callback.clone(), total_items_callback.clone(), prefix_callback.clone(), item_type_callback.clone())?;
-        let pos_lc_df = tuple_lcgc.0;
-        let pos_gc_df = tuple_lcgc.1;
-        let neg_lc_df = tuple_lcgc.2;
-        let neg_gc_df = tuple_lcgc.3;
-
-        py.allow_threads(|| { std::thread::sleep(std::time::Duration::from_millis(10)); });
-        if let Some(cb) = &step_callback { cb.call1(py, ("--  SPLITTING [EXP / In-Silico] --",))?; }
-        py.allow_threads(|| { std::thread::sleep(std::time::Duration::from_millis(10)); });
-
-        let tuple_exp = exp_in_silico_splitter(py, &pos_lc_df, &pos_gc_df, &neg_lc_df, &neg_gc_df, progress_callback.clone(), total_items_callback.clone(), prefix_callback.clone(), item_type_callback.clone())?;
-        let pos_lc_df = tuple_exp.0;
-        let pos_lc_in_silico_df = tuple_exp.1;
-        let pos_gc_df = tuple_exp.2;
-        let pos_gc_in_silico_df = tuple_exp.3;
-        let neg_lc_df = tuple_exp.4;
-        let neg_lc_in_silico_df = tuple_exp.5;
-        let neg_gc_df = tuple_exp.6;
-        let neg_gc_in_silico_df = tuple_exp.7;
+        let pos_lc_df = tuple_split.0;
+        let pos_lc_in_silico_df = tuple_split.1;
+        let pos_gc_df = tuple_split.2;
+        let pos_gc_in_silico_df = tuple_split.3;
+        let neg_lc_df = tuple_split.4;
+        let neg_lc_in_silico_df = tuple_split.5;
+        let neg_gc_df = tuple_split.6;
+        let neg_gc_in_silico_df = tuple_split.7;
 
         check_stop_flag()?;
 
