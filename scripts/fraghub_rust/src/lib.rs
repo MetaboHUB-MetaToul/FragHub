@@ -23,9 +23,13 @@ pub mod report;
 pub mod set_projects;
 pub mod deletion_report;
 pub mod rdkit_bridge;
+pub mod main_orchestrator;
 
 #[pymodule]
 fn fraghub_rust(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
+    // --- Orchestrator ---
+    m.add_function(wrap_pyfunction!(main_orchestrator::main_orchestrator, m)?)?;
+
     // --- Partie 1 : Chargement des bases de données ---
     m.add_function(wrap_pyfunction!(loading_db::load_internal_databases, m)?)?;
 
