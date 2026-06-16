@@ -4,7 +4,6 @@ use pyo3::prelude::*;
 use std::collections::HashMap;
 
 /// Convert keys in metadata_dict based on the provided keys_dict and keys_list.
-#[pyfunction]
 pub fn convert_keys(
     metadata_dict: HashMap<String, String>,
     keys_dict: HashMap<String, String>,

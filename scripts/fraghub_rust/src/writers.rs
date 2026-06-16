@@ -1,6 +1,6 @@
 // src/writers.rs
 use pyo3::prelude::*;
-use pyo3::types::{PyList, PyDict, PyAny};
+use crate::spectrum::Spectrum;
 use std::fs::{self, OpenOptions};
 use std::io::{Write, Seek, SeekFrom, Read};
 use std::path::Path;
@@ -8,8 +8,8 @@ use csv::WriterBuilder;
 use once_cell::sync::Lazy;
 use regex::Regex;
 
-fn write_msp<'py>(
-    py: Python<'py>, spectrum_list: &Bound<'py, PyList>, filename: &str, mode: &str, update: bool, output_directory: &str,
+fn write_msp(
+    py: Python, spectrum_list: &Vec<String>, filename: &str, mode: &str, update: bool, output_directory: &str,
     progress_callback: &Option<PyObject>, total_items_callback: &Option<PyObject>, prefix_callback: &Option<PyObject>, item_type_callback: &Option<PyObject>,
 ) -> PyResult<()> {
     let len = spectrum_list.len();
@@ -25,13 +25,10 @@ fn write_msp<'py>(
 
     let mut file = OpenOptions::new().write(true).create(true).append(update).truncate(!update).open(&file_path)?;
 
-    for i in 0..len {
-        if let Ok(item) = spectrum_list.get_item(i) {
-            if let Ok(spec_str) = item.extract::<String>() {
-                file.write_all(spec_str.as_bytes())?;
-                file.write_all(b"\n\n")?;
-            }
-        }
+    for (i, spec_str) in spectrum_list.iter().enumerate() {
+        file.write_all(spec_str.as_bytes())?;
+        file.write_all(b"\n\n")?;
+        
         if let Some(cb) = progress_callback {
             if (i + 1) % 500 == 0 || i == len - 1 { cb.call1(py, (i + 1,))?; }
         }
@@ -40,8 +37,8 @@ fn write_msp<'py>(
     Ok(())
 }
 
-fn write_csv<'py>(
-    py: Python<'py>, data_list: &Bound<'py, PyList>, ordered_columns: &Vec<String>, filename: &str, mode: &str, update: bool, output_directory: &str,
+fn write_csv(
+    py: Python, data_list: &Vec<Spectrum>, ordered_columns: &Vec<String>, filename: &str, mode: &str, update: bool, output_directory: &str,
     progress_callback: &Option<PyObject>, total_items_callback: &Option<PyObject>, prefix_callback: &Option<PyObject>, item_type_callback: &Option<PyObject>,
 ) -> PyResult<()> {
     let len = data_list.len();
@@ -63,23 +60,24 @@ fn write_csv<'py>(
         wtr.write_record(ordered_columns).map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
     }
 
-    for i in 0..len {
-        let item = data_list.get_item(i)?;
-        let dict = item.downcast::<PyDict>()?;
+    for (i, spec) in data_list.iter().enumerate() {
         let mut row = Vec::with_capacity(ordered_columns.len());
 
         for col in ordered_columns {
             let mut cell_val = String::new();
-            if let Ok(Some(val)) = dict.get_item(col.as_str()) {
-                if let Ok(s) = val.extract::<String>() {
-                    if !s.eq_ignore_ascii_case("nan") {
-                        cell_val = s;
-                        if col == "PEAKS_LIST" { cell_val = cell_val.replace('\n', ";"); }
+            
+            if col == "PEAKS_LIST" {
+                if !spec.peaks.is_empty() {
+                    let mut peaks_str = String::with_capacity(spec.peaks.len() * 20);
+                    for (i, &(mz, int)) in spec.peaks.iter().enumerate() {
+                        if i > 0 { peaks_str.push(';'); }
+                        peaks_str.push_str(&format!("{} {}", mz, int));
                     }
-                } else if let Ok(num) = val.extract::<f64>() {
-                    if !num.is_nan() { cell_val = num.to_string(); }
-                } else if let Ok(num) = val.extract::<i64>() {
-                    cell_val = num.to_string();
+                    cell_val = peaks_str;
+                }
+            } else if let Some(val) = spec.metadata.get(col) {
+                if !val.eq_ignore_ascii_case("nan") {
+                    cell_val = val.clone();
                 }
             }
             row.push(cell_val);
@@ -94,8 +92,8 @@ fn write_csv<'py>(
     Ok(())
 }
 
-fn write_json<'py>(
-    py: Python<'py>, update: bool, data_list: &Bound<'py, PyList>, filename: &str, mode: &str, output_directory: &str,
+fn write_json(
+    py: Python, update: bool, data_list: &Vec<Spectrum>, filename: &str, mode: &str, output_directory: &str,
     progress_callback: &Option<PyObject>, total_items_callback: &Option<PyObject>, prefix_callback: &Option<PyObject>, item_type_callback: &Option<PyObject>,
 ) -> PyResult<()> {
     let len = data_list.len();
@@ -134,30 +132,21 @@ fn write_json<'py>(
     };
 
     // Récupération dynamique des clés du premier dictionnaire pour le JSON
-    let first_item = data_list.get_item(0)?;
-    let first_dict = first_item.downcast::<PyDict>()?;
-    let columns: Vec<String> = first_dict.keys().extract()?;
+    let first_spec = &data_list[0];
+    let columns: Vec<String> = first_spec.metadata.keys().cloned().collect();
 
     static RE_3: Lazy<Regex> = Lazy::new(|| Regex::new(r#"\[\n\s*(-?[\d\.eE\+\-]+),\n\s*(-?[\d\.eE\+\-]+),\n\s*"(.*?)"\n\s*\]"#).unwrap());
     static RE_2: Lazy<Regex> = Lazy::new(|| Regex::new(r#"\[\n\s*(-?[\d\.eE\+\-]+),\n\s*(-?[\d\.eE\+\-]+)\n\s*\]"#).unwrap());
 
-    for i in 0..len {
-        let item = data_list.get_item(i)?;
-        let dict = item.downcast::<PyDict>()?;
+    for (i, spec) in data_list.iter().enumerate() {
         let mut map = serde_json::Map::new();
 
         for col in &columns {
             if col == "PEAKS_LIST" || col == "NUM PEAKS" { continue; }
 
             let mut val_str = "NaN".to_string();
-            if let Ok(Some(val)) = dict.get_item(col.as_str()) {
-                if let Ok(s) = val.extract::<String>() {
-                    if !s.is_empty() && !s.eq_ignore_ascii_case("nan") { val_str = s; }
-                } else if let Ok(num) = val.extract::<f64>() {
-                    if !num.is_nan() { val_str = num.to_string(); }
-                } else if let Ok(num) = val.extract::<i64>() {
-                    val_str = num.to_string();
-                }
+            if let Some(val) = spec.metadata.get(col) {
+                if !val.is_empty() && !val.eq_ignore_ascii_case("nan") { val_str = val.clone(); }
             }
 
             if col == "MSLEVEL" { if let Ok(num) = val_str.parse::<i64>() { map.insert(col.clone(), serde_json::json!(num)); continue; } }
@@ -167,25 +156,12 @@ fn write_json<'py>(
             map.insert(col.clone(), serde_json::Value::String(val_str));
         }
 
-        let num_peaks_str = if let Ok(Some(val)) = dict.get_item("NUM PEAKS") { val.extract::<String>().unwrap_or_else(|_| "0".to_string()) } else { "0".to_string() };
+        let num_peaks_str = spec.metadata.get("NUM PEAKS").cloned().unwrap_or_else(|| "0".to_string());
         map.insert("NUM PEAKS".to_string(), serde_json::json!(num_peaks_str.parse::<i64>().unwrap_or(0)));
 
         let mut peaks_array = Vec::new();
-        if let Ok(Some(val)) = dict.get_item("PEAKS_LIST") {
-            if let Ok(peaks_str) = val.extract::<String>() {
-                if !peaks_str.is_empty() && !peaks_str.eq_ignore_ascii_case("nan") && peaks_str != "NOT FOUND" {
-                    let pairs: Vec<&str> = if peaks_str.contains(';') { peaks_str.trim().split(';').collect() } else { peaks_str.trim().split('\n').collect() };
-                    for pair in pairs {
-                        let parts: Vec<&str> = pair.split_whitespace().collect();
-                        if parts.len() >= 2 {
-                            if let (Ok(mz), Ok(intensity)) = (parts[0].parse::<f64>(), parts[1].parse::<f64>()) {
-                                if parts.len() == 3 { peaks_array.push(serde_json::json!([mz, intensity, parts[2]])); }
-                                else { peaks_array.push(serde_json::json!([mz, intensity])); }
-                            }
-                        }
-                    }
-                }
-            }
+        for &(mz, intensity) in &spec.peaks {
+            peaks_array.push(serde_json::json!([mz, intensity]));
         }
         map.insert("PEAKS_LIST".to_string(), serde_json::Value::Array(peaks_array));
 
@@ -209,11 +185,8 @@ fn write_json<'py>(
 
 // ======================== ORCHESTRATEURS EXPOSÉS À PYTHON ========================
 
-#[pyfunction]
-#[pyo3(signature = (pos_lc, pos_lc_insilico, pos_gc, pos_gc_insilico, neg_lc, neg_lc_insilico, neg_gc, neg_gc_insilico, output_directory, update=false, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None))]
-#[allow(clippy::too_many_arguments)]
-pub fn writting_msp_processing<'py>(
-    py: Python<'py>, pos_lc: Bound<'py, PyList>, pos_lc_insilico: Bound<'py, PyList>, pos_gc: Bound<'py, PyList>, pos_gc_insilico: Bound<'py, PyList>, neg_lc: Bound<'py, PyList>, neg_lc_insilico: Bound<'py, PyList>, neg_gc: Bound<'py, PyList>, neg_gc_insilico: Bound<'py, PyList>, output_directory: &str, update: bool, progress_callback: Option<PyObject>, total_items_callback: Option<PyObject>, prefix_callback: Option<PyObject>, item_type_callback: Option<PyObject>,
+pub fn writting_msp_processing(
+    py: Python, pos_lc: Vec<String>, pos_lc_insilico: Vec<String>, pos_gc: Vec<String>, pos_gc_insilico: Vec<String>, neg_lc: Vec<String>, neg_lc_insilico: Vec<String>, neg_gc: Vec<String>, neg_gc_insilico: Vec<String>, output_directory: &str, update: bool, progress_callback: Option<PyObject>, total_items_callback: Option<PyObject>, prefix_callback: Option<PyObject>, item_type_callback: Option<PyObject>,
 ) -> PyResult<()> {
     let sleep = || std::thread::sleep(std::time::Duration::from_millis(100));
     sleep(); write_msp(py, &pos_lc, "POS_LC.msp", "POS", update, output_directory, &progress_callback, &total_items_callback, &prefix_callback, &item_type_callback)?;
@@ -227,11 +200,8 @@ pub fn writting_msp_processing<'py>(
     Ok(())
 }
 
-#[pyfunction]
-#[pyo3(signature = (pos_lc_df, pos_gc_df, neg_lc_df, neg_gc_df, pos_lc_df_insilico, pos_gc_df_insilico, neg_lc_df_insilico, neg_gc_df_insilico, ordered_columns, output_directory, update=false, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None))]
-#[allow(clippy::too_many_arguments)]
-pub fn writting_csv_processing<'py>(
-    py: Python<'py>, pos_lc_df: Bound<'py, PyList>, pos_gc_df: Bound<'py, PyList>, neg_lc_df: Bound<'py, PyList>, neg_gc_df: Bound<'py, PyList>, pos_lc_df_insilico: Bound<'py, PyList>, pos_gc_df_insilico: Bound<'py, PyList>, neg_lc_df_insilico: Bound<'py, PyList>, neg_gc_df_insilico: Bound<'py, PyList>, ordered_columns: Vec<String>, output_directory: &str, update: bool, progress_callback: Option<PyObject>, total_items_callback: Option<PyObject>, prefix_callback: Option<PyObject>, item_type_callback: Option<PyObject>,
+pub fn writting_csv_processing(
+    py: Python, pos_lc_df: Vec<Spectrum>, pos_gc_df: Vec<Spectrum>, neg_lc_df: Vec<Spectrum>, neg_gc_df: Vec<Spectrum>, pos_lc_df_insilico: Vec<Spectrum>, pos_gc_df_insilico: Vec<Spectrum>, neg_lc_df_insilico: Vec<Spectrum>, neg_gc_df_insilico: Vec<Spectrum>, ordered_columns: Vec<String>, output_directory: &str, update: bool, progress_callback: Option<PyObject>, total_items_callback: Option<PyObject>, prefix_callback: Option<PyObject>, item_type_callback: Option<PyObject>,
 ) -> PyResult<()> {
     let sleep = || std::thread::sleep(std::time::Duration::from_millis(100));
     sleep(); write_csv(py, &pos_lc_df, &ordered_columns, "POS_LC.csv", "POS", update, output_directory, &progress_callback, &total_items_callback, &prefix_callback, &item_type_callback)?;
@@ -245,11 +215,8 @@ pub fn writting_csv_processing<'py>(
     Ok(())
 }
 
-#[pyfunction]
-#[pyo3(signature = (update, pos_lc_df, pos_gc_df, neg_lc_df, neg_gc_df, pos_lc_df_insilico, pos_gc_df_insilico, neg_lc_df_insilico, neg_gc_df_insilico, output_directory, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None))]
-#[allow(clippy::too_many_arguments)]
-pub fn writting_json_processing<'py>(
-    py: Python<'py>, update: bool, pos_lc_df: Bound<'py, PyList>, pos_gc_df: Bound<'py, PyList>, neg_lc_df: Bound<'py, PyList>, neg_gc_df: Bound<'py, PyList>, pos_lc_df_insilico: Bound<'py, PyList>, pos_gc_df_insilico: Bound<'py, PyList>, neg_lc_df_insilico: Bound<'py, PyList>, neg_gc_df_insilico: Bound<'py, PyList>, output_directory: &str, progress_callback: Option<PyObject>, total_items_callback: Option<PyObject>, prefix_callback: Option<PyObject>, item_type_callback: Option<PyObject>,
+pub fn writting_json_processing(
+    py: Python, update: bool, pos_lc_df: Vec<Spectrum>, pos_gc_df: Vec<Spectrum>, neg_lc_df: Vec<Spectrum>, neg_gc_df: Vec<Spectrum>, pos_lc_df_insilico: Vec<Spectrum>, pos_gc_df_insilico: Vec<Spectrum>, neg_lc_df_insilico: Vec<Spectrum>, neg_gc_df_insilico: Vec<Spectrum>, output_directory: &str, progress_callback: Option<PyObject>, total_items_callback: Option<PyObject>, prefix_callback: Option<PyObject>, item_type_callback: Option<PyObject>,
 ) -> PyResult<()> {
     let sleep = || std::thread::sleep(std::time::Duration::from_millis(100));
     sleep(); write_json(py, update, &pos_lc_df, "POS_LC.json", "POS", output_directory, &progress_callback, &total_items_callback, &prefix_callback, &item_type_callback)?;

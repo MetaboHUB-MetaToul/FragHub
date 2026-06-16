@@ -1,6 +1,5 @@
 // src/splash_generator.rs
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList};
 use rayon::prelude::*;
 use sha2::{Digest, Sha256};
 use std::cmp::Ordering;
@@ -11,11 +10,11 @@ const INTENSITY_PRECISION_FACTOR: f64 = 1.0;
 const INTENSITY_MAP: &[u8] = b"0123456789abcdefghijklmnopqrstuvwxyz";
 
 #[derive(Clone)]
-struct Spectrum {
+struct SplashSpectrum {
     peaks: Vec<(f64, f64)>, // mz, intensity
 }
 
-impl Spectrum {
+impl SplashSpectrum {
     fn new(mut raw_peaks: Vec<(f64, f64)>) -> Self {
         let max_int = raw_peaks.iter().map(|&(_, i)| i).fold(0.0_f64, f64::max);
         if max_int > 0.0 {
@@ -40,11 +39,11 @@ impl Spectrum {
     }
 }
 
-fn calculate_splash(spectrum: &Spectrum) -> Option<String> {
+fn calculate_splash(spectrum: &SplashSpectrum) -> Option<String> {
     if spectrum.peaks.is_empty() { return None; }
     let initial_block = "splash10";
 
-    let calc_hist = |spec: &Spectrum, base: f64, length: usize, bin_size: f64| -> String {
+    let calc_hist = |spec: &SplashSpectrum, base: f64, length: usize, bin_size: f64| -> String {
         let mut hist = vec![0.0; length];
         for &(mz, int) in &spec.peaks {
             let idx = (mz / bin_size) as usize % length;
@@ -94,17 +93,15 @@ fn calculate_splash(spectrum: &Spectrum) -> Option<String> {
     Some(format!("{}-{}-{}-{}", initial_block, prefilter_block, similarity_block, exact_hash))
 }
 
-#[pyfunction]
-#[pyo3(signature = (spectrum_list, filename, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None))]
-pub fn generate_splash_processing<'py>(
-    py: Python<'py>,
-    spectrum_list: Bound<'py, PyList>,
+pub fn generate_splash_processing(
+    py: Python,
+    mut spectrum_list: Vec<crate::spectrum::Spectrum>,
     filename: String,
     progress_callback: Option<PyObject>,
     total_items_callback: Option<PyObject>,
     prefix_callback: Option<PyObject>,
     item_type_callback: Option<PyObject>,
-) -> PyResult<Bound<'py, PyList>> {
+) -> PyResult<Vec<crate::spectrum::Spectrum>> {
 
     let total = spectrum_list.len();
 
@@ -113,43 +110,21 @@ pub fn generate_splash_processing<'py>(
     if let Some(cb) = &prefix_callback { cb.call1(py, (format!("generating SPLASH for [{}]:", filename),))?; }
     if let Some(cb) = &item_type_callback { cb.call1(py, ("spectra",))?; }
 
-    struct PySpectrum {
-        index: usize,
-        peaks: Vec<(f64, f64)>,
-    }
-
-    let mut rust_spectra = Vec::with_capacity(total);
-    for (i, item) in spectrum_list.iter().enumerate() {
-        if let Ok(dict) = item.downcast::<PyDict>() {
-            if let Ok(Some(peaks_list)) = dict.get_item("PEAKS_LIST") {
-                if let Ok(extracted_peaks) = peaks_list.extract::<Vec<Vec<f64>>>() {
-                    let peaks: Vec<(f64, f64)> = extracted_peaks.into_iter().filter_map(|p| {
-                        if p.len() >= 2 { Some((p[0], p[1])) } else { None }
-                    }).collect();
-                    rust_spectra.push(PySpectrum { index: i, peaks });
-                }
-            }
-        }
-    }
-
     let chunk_size = 2000;
     let mut processed = 0;
 
-    for chunk in rust_spectra.chunks(chunk_size) {
-        let splash_results: Vec<(usize, Option<String>)> = chunk
+    for chunk in spectrum_list.chunks_mut(chunk_size) {
+        let splash_results: Vec<Option<String>> = chunk
             .par_iter()
             .map(|spec| {
-                let spectrum_obj = Spectrum::new(spec.peaks.clone());
-                let splash = calculate_splash(&spectrum_obj);
-                (spec.index, splash)
+                let splash_spectrum = SplashSpectrum::new(spec.peaks.clone());
+                calculate_splash(&splash_spectrum)
             })
             .collect();
 
-        for (index, splash_opt) in splash_results {
+        for (spec, splash_opt) in chunk.iter_mut().zip(splash_results.into_iter()) {
             if let Some(splash_str) = splash_opt {
-                if let Ok(dict) = spectrum_list.get_item(index).unwrap().downcast::<PyDict>() {
-                    dict.set_item("SPLASH", splash_str)?;
-                }
+                spec.metadata.insert("SPLASH".to_string(), splash_str);
             }
         }
 

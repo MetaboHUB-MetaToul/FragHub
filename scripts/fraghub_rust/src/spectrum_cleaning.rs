@@ -1,34 +1,25 @@
 // src/spectrum_cleaning.rs
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PyAny};
+use pyo3::types::{PyDict, PyAny};
+use crate::spectrum::Spectrum;
 use rayon::prelude::*;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use csv::WriterBuilder;
 
-#[derive(Clone)]
-struct RustSpectrum {
-    index: usize,
-    metadata: HashMap<String, String>,
-    peaks: Vec<(f64, f64)>,
-    is_empty_peaks: bool,
-}
-
-#[pyfunction]
-#[pyo3(signature = (spectrum_list, output_directory, ordered_columns, deletion_report_obj, parameters_dict_py, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None))]
-pub fn spectrum_cleaning_processing<'py>(
-    py: Python<'py>,
-    spectrum_list: Bound<'py, PyList>,
+pub fn spectrum_cleaning_processing(
+    py: Python,
+    spectrum_list: Vec<Spectrum>,
     output_directory: String,
     ordered_columns: Vec<String>,
-    deletion_report_obj: Bound<'py, PyAny>, // <-- NOUVEL ARGUMENT : L'objet DeletionReport !
-    parameters_dict_py: Bound<'py, PyDict>,
+    deletion_report_obj: pyo3::Bound<'_, pyo3::types::PyAny>, // <-- NOUVEL ARGUMENT : L'objet DeletionReport !
+    parameters_dict_py: pyo3::Bound<'_, pyo3::types::PyDict>,
     progress_callback: Option<PyObject>,
     total_items_callback: Option<PyObject>,
     prefix_callback: Option<PyObject>,
     item_type_callback: Option<PyObject>,
-) -> PyResult<Bound<'py, PyList>> {
+) -> PyResult<Vec<Spectrum>> {
 
     let total_items = spectrum_list.len();
 
@@ -60,55 +51,18 @@ pub fn spectrum_cleaning_processing<'py>(
         }
     };
 
-    // 1. Extraction ultra-rapide des données vers Rust
-    let mut rust_spectra = Vec::with_capacity(total_items);
-    for (i, item) in spectrum_list.iter().enumerate() {
-        let dict = item.downcast::<PyDict>()?;
-        let mut metadata = HashMap::new();
-        let mut peaks = Vec::new();
-        let mut is_empty_peaks = true;
-
-        for (k, v) in dict.iter() {
-            let key_str = k.extract::<String>()?;
-            if key_str == "PEAKS_LIST" {
-                if let Ok(extracted_peaks) = v.extract::<Vec<Vec<f64>>>() {
-                    peaks = extracted_peaks.into_iter().filter_map(|p| {
-                        if p.len() >= 2 { Some((p[0], p[1])) } else { None }
-                    }).collect();
-                    if !peaks.is_empty() { is_empty_peaks = false; }
-                } else if let Ok(s) = v.extract::<String>() {
-                    if !s.trim().is_empty() {
-                        for line in s.split('\n') {
-                            let parts: Vec<&str> = line.split_whitespace().collect();
-                            if parts.len() >= 2 {
-                                if let (Ok(mz), Ok(int)) = (parts[0].parse::<f64>(), parts[1].parse::<f64>()) {
-                                    peaks.push((mz, int));
-                                }
-                            }
-                        }
-                        if !peaks.is_empty() { is_empty_peaks = false; }
-                    }
-                }
-            } else {
-                let val_str = if let Ok(s) = v.extract::<String>() { s } else { v.to_string() };
-                metadata.insert(key_str, val_str);
-            }
-        }
-        rust_spectra.push(RustSpectrum { index: i, metadata, peaks, is_empty_peaks });
-    }
-
     // 2. Traitement Multithreadé (Rayon)
     let chunk_size = 2000;
     let mut processed = 0;
     let mut kept_spectra = Vec::new();
     let mut deleted_spectra: HashMap<String, Vec<HashMap<String, String>>> = HashMap::new();
 
-    for chunk in rust_spectra.chunks(chunk_size) {
+    for chunk in spectrum_list.chunks(chunk_size) {
         let results: Vec<_> = py.allow_threads(|| {
             chunk.par_iter().map(|spec| {
                 let mut meta = spec.metadata.clone();
 
-                if spec.is_empty_peaks {
+                if spec.peaks.is_empty() {
                     return Err((meta, "spectrum deleted because peaks list is empty".to_string()));
                 }
 
@@ -254,14 +208,14 @@ pub fn spectrum_cleaning_processing<'py>(
     }
 
     // 5. Reconstruction de la liste finale
-    let py_final_list = PyList::empty_bound(py);
+    let mut final_list = Vec::with_capacity(kept_spectra.len());
     for meta in kept_spectra {
-        let py_dict = PyDict::new_bound(py);
-        for (k, v) in meta { py_dict.set_item(k, v)?; }
-        py_final_list.append(py_dict)?;
+        let mut spec = Spectrum::default();
+        spec.metadata = meta;
+        final_list.push(spec);
     }
 
     if let Some(cb) = &progress_callback { cb.call1(py, (total_items,))?; }
 
-    Ok(py_final_list)
+    Ok(final_list)
 }

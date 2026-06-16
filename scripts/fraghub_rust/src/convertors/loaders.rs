@@ -37,7 +37,6 @@ impl RawMspSpectra {
 }
 
 /// Gets the size of a file in bytes, converts it to a string, and returns the SHA-256 hash.
-#[pyfunction]
 pub fn generate_file_hash(file_path: &str) -> String {
     if let Ok(metadata) = std::fs::metadata(file_path) {
         let size = metadata.len().to_string();
@@ -52,8 +51,6 @@ pub fn generate_file_hash(file_path: &str) -> String {
 // ----------------------------------------------------------------------
 // RUST NATIVE JSON LOADER (Array Format - GNPS)
 // ----------------------------------------------------------------------
-#[pyfunction]
-#[pyo3(signature = (json_file_path, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None))]
 pub fn load_spectrum_list_json(
     py: Python,
     json_file_path: &str,
@@ -145,8 +142,6 @@ pub fn load_spectrum_list_json(
 // ----------------------------------------------------------------------
 // RUST NATIVE JSONL LOADER (Ligne par Ligne)
 // ----------------------------------------------------------------------
-#[pyfunction]
-#[pyo3(signature = (json_file_path, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None))]
 pub fn load_spectrum_list_json_2(
     py: Python,
     json_file_path: &str,
@@ -208,8 +203,6 @@ pub fn load_spectrum_list_json_2(
 // ----------------------------------------------------------------------
 // MSP FORMAT
 // ----------------------------------------------------------------------
-#[pyfunction]
-#[pyo3(signature = (msp_file_path, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None))]
 pub fn load_spectrum_list_from_msp(
     py: Python,
     msp_file_path: &str,
@@ -281,8 +274,6 @@ pub fn load_spectrum_list_from_msp(
 // ----------------------------------------------------------------------
 // MGF FORMAT
 // ----------------------------------------------------------------------
-#[pyfunction]
-#[pyo3(signature = (mgf_file_path, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None))]
 pub fn load_spectrum_list_from_mgf(
     py: Python,
     mgf_file_path: &str,

@@ -1,23 +1,21 @@
 // src/duplicatas_remover.rs
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PyString};
+use crate::spectrum::Spectrum;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 use csv::WriterBuilder;
 
-#[pyfunction]
-#[pyo3(signature = (spectrum_list, output_directory, ordered_columns, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None))]
-pub fn remove_duplicatas_processing<'py>(
-    py: Python<'py>,
-    spectrum_list: Bound<'py, PyList>,
+pub fn remove_duplicatas_processing(
+    py: Python,
+    mut spectrum_list: Vec<Spectrum>,
     output_directory: String,
     ordered_columns: Vec<String>,
     progress_callback: Option<PyObject>,
     total_items_callback: Option<PyObject>,
     prefix_callback: Option<PyObject>,
     item_type_callback: Option<PyObject>,
-) -> PyResult<(Bound<'py, PyList>, usize)> {
+) -> PyResult<(Vec<Spectrum>, usize)> {
 
     let total_items = spectrum_list.len();
 
@@ -31,28 +29,16 @@ pub fn remove_duplicatas_processing<'py>(
 
     let mut processed = 0;
 
-    for i in 0..total_items {
-        let item = spectrum_list.get_item(i).unwrap();
-        let dict = item.downcast::<PyDict>()?;
-
+    for (i, spec) in spectrum_list.iter().enumerate() {
         let mut row_size = 0;
         for col in &ordered_columns {
-            if let Ok(Some(val)) = dict.get_item(col) {
-                if let Ok(val_str) = val.downcast::<PyString>() {
-                    if let Ok(s) = val_str.to_str() { row_size += s.chars().count(); }
-                } else if let Ok(val_str) = val.str() {
-                    if let Ok(s) = val_str.to_str() { row_size += s.chars().count(); }
-                }
+            if let Some(val) = spec.metadata.get(col) {
+                row_size += val.chars().count();
             }
         }
 
-        let splash = if let Ok(Some(s)) = dict.get_item("SPLASH") {
-            if let Ok(s_str) = s.str() { s_str.to_str().unwrap_or("").to_string() } else { String::new() }
-        } else { String::new() };
-
-        let inchikey = if let Ok(Some(inch)) = dict.get_item("INCHIKEY") {
-            if let Ok(inch_str) = inch.str() { inch_str.to_str().unwrap_or("").trim().to_string() } else { String::new() }
-        } else { String::new() };
+        let splash = spec.metadata.get("SPLASH").cloned().unwrap_or_default();
+        let inchikey = spec.metadata.get("INCHIKEY").map(|s| s.trim().to_string()).unwrap_or_default();
 
         if inchikey.is_empty() || inchikey.to_lowercase() == "nan" || inchikey.to_lowercase() == "none" {
             empty_inchi_indices.push(i);
@@ -100,20 +86,11 @@ pub fn remove_duplicatas_processing<'py>(
         wtr.write_record(&header).map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
 
         for &idx in &indices_to_delete {
-            let item = spectrum_list.get_item(idx).unwrap();
-            let dict = item.downcast::<PyDict>()?;
+            let spec = &spectrum_list[idx];
             let mut record: Vec<String> = Vec::with_capacity(ordered_columns.len() + 1);
 
             for col in &ordered_columns {
-                if let Ok(Some(val)) = dict.get_item(col) {
-                    if let Ok(val_str) = val.str() {
-                        if let Ok(s) = val_str.to_str() {
-                            record.push(s.to_string());
-                            continue;
-                        }
-                    }
-                }
-                record.push(String::new());
+                record.push(spec.metadata.get(col).cloned().unwrap_or_default());
             }
             record.push("spectrum deleted because it's a duplicate (SPLASH + INCHIKEY)".to_string());
             wtr.write_record(&record).map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
@@ -121,11 +98,13 @@ pub fn remove_duplicatas_processing<'py>(
         wtr.flush()?;
     }
 
-    let final_list = PyList::empty_bound(py);
-    for i in 0..total_items {
-        if indices_to_keep.contains(&i) {
-            final_list.append(spectrum_list.get_item(i).unwrap())?;
+    let mut final_list = Vec::with_capacity(indices_to_keep.len());
+    let mut current_idx = 0;
+    for spec in spectrum_list.into_iter() {
+        if indices_to_keep.contains(&current_idx) {
+            final_list.push(spec);
         }
+        current_idx += 1;
     }
 
     // ⚠️ GARANTIE DU 100% POUR CLÔTURER L'INTERFACE PROPREMENT

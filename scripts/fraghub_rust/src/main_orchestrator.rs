@@ -15,7 +15,7 @@ use crate::complete_from_pubchem_datas::complete_from_pubchem_datas;
 use crate::ontologies_completion::ontologies_completion_processing;
 use crate::de_novo_calculation::de_novo_calculation_processing;
 use crate::normalize_to_not_found::normalize_to_not_found_processing;
-use crate::splitter::{split_pos_neg, split_LC_GC, exp_in_silico_splitter};
+use crate::splitter::{split_pos_neg, split_lc_gc, exp_in_silico_splitter};
 use crate::csv_to_msp::csv_to_msp_processing;
 use crate::writers::{writting_csv_processing, writting_msp_processing, writting_json_processing};
 use crate::report::generate_report_processing;
@@ -24,9 +24,9 @@ use crate::deletion_report::DeletionReport;
 
 #[pyfunction]
 #[pyo3(signature = (parameters_dict, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None, step_callback=None, completion_callback=None, deletion_callback=None, stop_flag=None))]
-pub fn main_orchestrator<'py>(
-    py: Python<'py>,
-    parameters_dict: &Bound<'py, PyDict>,
+pub fn main_orchestrator(
+    py: Python,
+    parameters_dict: &pyo3::Bound<'_, pyo3::types::PyDict>,
     progress_callback: Option<PyObject>,
     total_items_callback: Option<PyObject>,
     prefix_callback: Option<PyObject>,
@@ -73,10 +73,10 @@ pub fn main_orchestrator<'py>(
 
     check_stop_flag()?;
 
-    let final_msp = tuple_res.get_item(0)?.downcast_into::<PyList>()?;
-    let final_csv = tuple_res.get_item(1)?.downcast_into::<PyList>()?;
-    let final_json = tuple_res.get_item(2)?.downcast_into::<PyList>()?;
-    let final_mgf = tuple_res.get_item(3)?.downcast_into::<PyList>()?;
+    let final_msp = tuple_res.0;
+    let final_csv = tuple_res.1;
+    let final_json = tuple_res.2;
+    let final_mgf = tuple_res.3;
 
     if final_msp.is_empty() && final_csv.is_empty() && final_json.is_empty() && final_mgf.is_empty() {
         if let Some(cb) = &deletion_callback { cb.call1(py, ("-- THERE IS NO FILES TO PROCESS --",))?; }
@@ -102,11 +102,11 @@ pub fn main_orchestrator<'py>(
     py.allow_threads(|| { std::thread::sleep(std::time::Duration::from_millis(100)); });
 
     // Merging into one single PyList
-    let spectrum_list = PyList::empty_bound(py);
-    for item in final_msp.iter() { spectrum_list.append(item)?; }
-    for item in final_csv.iter() { spectrum_list.append(item)?; }
-    for item in final_json.iter() { spectrum_list.append(item)?; }
-    for item in final_mgf.iter() { spectrum_list.append(item)?; }
+    let mut spectrum_list = Vec::with_capacity(final_msp.len() + final_csv.len() + final_json.len() + final_mgf.len());
+    spectrum_list.extend(final_msp);
+    spectrum_list.extend(final_csv);
+    spectrum_list.extend(final_json);
+    spectrum_list.extend(final_mgf);
 
     if let Some(cb) = &progress_callback { cb.call1(py, (1,))?; }
     py.allow_threads(|| { std::thread::sleep(std::time::Duration::from_millis(10)); });
@@ -178,7 +178,7 @@ pub fn main_orchestrator<'py>(
         py.allow_threads(|| { std::thread::sleep(std::time::Duration::from_millis(10)); });
 
         spectrum_list = process_mols(
-            py, &spectrum_list, &output_directory, &deletion_report_bound.clone().into_any(),
+            py, spectrum_list, &output_directory, &deletion_report_bound.clone().into_any(),
             progress_callback.clone(), total_items_callback.clone(), prefix_callback.clone(), item_type_callback.clone()
         )?;
         check_stop_flag()?;
@@ -189,7 +189,7 @@ pub fn main_orchestrator<'py>(
         py.allow_threads(|| { std::thread::sleep(std::time::Duration::from_millis(10)); });
 
         spectrum_list = complete_from_pubchem_datas(
-            py, &spectrum_list, progress_callback.clone(), total_items_callback.clone(), prefix_callback.clone(), item_type_callback.clone()
+            py, spectrum_list, progress_callback.clone(), total_items_callback.clone(), prefix_callback.clone(), item_type_callback.clone()
         )?;
         check_stop_flag()?;
 
@@ -199,7 +199,7 @@ pub fn main_orchestrator<'py>(
         py.allow_threads(|| { std::thread::sleep(std::time::Duration::from_millis(10)); });
 
         spectrum_list = ontologies_completion_processing(
-            py, &spectrum_list, progress_callback.clone(), total_items_callback.clone(), prefix_callback.clone(), item_type_callback.clone()
+            py, spectrum_list, progress_callback.clone(), total_items_callback.clone(), prefix_callback.clone(), item_type_callback.clone()
         )?;
         check_stop_flag()?;
 
@@ -211,12 +211,12 @@ pub fn main_orchestrator<'py>(
             py.allow_threads(|| { std::thread::sleep(std::time::Duration::from_millis(10)); });
 
             spectrum_list = de_novo_calculation_processing(
-                py, &spectrum_list, parameters_dict.clone(), progress_callback.clone(), total_items_callback.clone(), prefix_callback.clone(), item_type_callback.clone()
+                py, spectrum_list, parameters_dict.clone(), progress_callback.clone(), total_items_callback.clone(), prefix_callback.clone(), item_type_callback.clone()
             )?;
             check_stop_flag()?;
         }
 
-        spectrum_list = normalize_to_not_found_processing(py, &spectrum_list)?;
+        spectrum_list = normalize_to_not_found_processing(py, spectrum_list)?;
 
         // STEP 10: SPLITTING
         py.allow_threads(|| { std::thread::sleep(std::time::Duration::from_millis(10)); });
@@ -231,7 +231,7 @@ pub fn main_orchestrator<'py>(
         if let Some(cb) = &step_callback { cb.call1(py, ("--  SPLITTING [LC / GC] --",))?; }
         py.allow_threads(|| { std::thread::sleep(std::time::Duration::from_millis(10)); });
 
-        let tuple_lcgc = split_LC_GC(py, &pos_df, &neg_df, progress_callback.clone(), total_items_callback.clone(), prefix_callback.clone(), item_type_callback.clone())?;
+        let tuple_lcgc = split_lc_gc(py, &pos_df, &neg_df, progress_callback.clone(), total_items_callback.clone(), prefix_callback.clone(), item_type_callback.clone())?;
         let pos_lc_df = tuple_lcgc.0;
         let pos_gc_df = tuple_lcgc.1;
         let neg_lc_df = tuple_lcgc.2;
@@ -254,14 +254,14 @@ pub fn main_orchestrator<'py>(
         check_stop_flag()?;
 
         // STEP 11: MSP / CSV / JSON
-        let mut pos_lc_msp = PyList::empty_bound(py);
-        let mut pos_lc_insilico_msp = PyList::empty_bound(py);
-        let mut pos_gc_msp = PyList::empty_bound(py);
-        let mut pos_gc_insilico_msp = PyList::empty_bound(py);
-        let mut neg_lc_msp = PyList::empty_bound(py);
-        let mut neg_lc_insilico_msp = PyList::empty_bound(py);
-        let mut neg_gc_msp = PyList::empty_bound(py);
-        let mut neg_gc_insilico_msp = PyList::empty_bound(py);
+        let mut pos_lc_msp = Vec::new();
+        let mut pos_lc_insilico_msp = Vec::new();
+        let mut pos_gc_msp = Vec::new();
+        let mut pos_gc_insilico_msp = Vec::new();
+        let mut neg_lc_msp = Vec::new();
+        let mut neg_lc_insilico_msp = Vec::new();
+        let mut neg_gc_msp = Vec::new();
+        let mut neg_gc_insilico_msp = Vec::new();
 
         let msp_val: f64 = parameters_dict.get_item("msp")?.map(|v| v.extract().unwrap_or(0.0)).unwrap_or(0.0);
         if msp_val == 1.0 {
@@ -270,14 +270,14 @@ pub fn main_orchestrator<'py>(
             py.allow_threads(|| { std::thread::sleep(std::time::Duration::from_millis(10)); });
 
             let tuple_msp = csv_to_msp_processing(py, pos_lc_df.clone(), pos_lc_in_silico_df.clone(), pos_gc_df.clone(), pos_gc_in_silico_df.clone(), neg_lc_df.clone(), neg_lc_in_silico_df.clone(), neg_gc_df.clone(), neg_gc_in_silico_df.clone(), progress_callback.clone(), total_items_callback.clone(), prefix_callback.clone(), item_type_callback.clone())?;
-            pos_lc_msp = PyList::new_bound(py, tuple_msp.0);
-            pos_lc_insilico_msp = PyList::new_bound(py, tuple_msp.1);
-            pos_gc_msp = PyList::new_bound(py, tuple_msp.2);
-            pos_gc_insilico_msp = PyList::new_bound(py, tuple_msp.3);
-            neg_lc_msp = PyList::new_bound(py, tuple_msp.4);
-            neg_lc_insilico_msp = PyList::new_bound(py, tuple_msp.5);
-            neg_gc_msp = PyList::new_bound(py, tuple_msp.6);
-            neg_gc_insilico_msp = PyList::new_bound(py, tuple_msp.7);
+            pos_lc_msp = tuple_msp.0;
+            pos_lc_insilico_msp = tuple_msp.1;
+            pos_gc_msp = tuple_msp.2;
+            pos_gc_insilico_msp = tuple_msp.3;
+            neg_lc_msp = tuple_msp.4;
+            neg_lc_insilico_msp = tuple_msp.5;
+            neg_gc_msp = tuple_msp.6;
+            neg_gc_insilico_msp = tuple_msp.7;
         }
         check_stop_flag()?;
 

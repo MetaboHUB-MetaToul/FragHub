@@ -1,22 +1,21 @@
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PyAny};
+use pyo3::types::{PyList, PyAny};
+use crate::spectrum::Spectrum;
 use std::collections::HashMap;
 use crate::globals_vars::{INDIGO_SMILES_CORRECTION_PATTERN, INCHIKEY_PATTERN};
 use std::fs;
 use std::path::Path;
 
-#[pyfunction]
-#[pyo3(signature = (spectrum_list, output_directory, deletion_report, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None))]
-pub fn process_mols<'py>(
-    py: Python<'py>,
-    spectrum_list: &Bound<'py, PyList>,
+pub fn process_mols(
+    py: Python,
+    mut spectrum_list: Vec<Spectrum>,
     output_directory: &str,
-    deletion_report: &Bound<'py, PyAny>,
+    deletion_report: &pyo3::Bound<'_, pyo3::types::PyAny>,
     progress_callback: Option<PyObject>,
     total_items_callback: Option<PyObject>,
     prefix_callback: Option<PyObject>,
     item_type_callback: Option<PyObject>,
-) -> PyResult<Bound<'py, PyList>> {
+) -> PyResult<Vec<Spectrum>> {
 
     if let Some(cb) = &prefix_callback { cb.call1(py, ("derivation and calculation (RDKit via Rust):",))?; }
     if let Some(cb) = &item_type_callback { cb.call1(py, ("rows",))?; }
@@ -30,7 +29,7 @@ pub fn process_mols<'py>(
     let total = spectrum_list.len();
     if let Some(cb) = &total_items_callback { cb.call1(py, (total, 0))?; }
 
-    let valid_list = PyList::empty_bound(py);
+    let mut valid_list = Vec::new();
     let mut deleted_count = 0;
     
     // Pour stocker les lignes supprimées
@@ -40,12 +39,9 @@ pub fn process_mols<'py>(
     // Cache pour éviter de recalculer les mêmes molécules
     let mut cache: HashMap<String, HashMap<String, String>> = HashMap::new();
 
-    for i in 0..total {
-        let item = spectrum_list.get_item(i).unwrap();
-        let dict = item.downcast::<PyDict>()?;
-        
-        let inchi = dict.get_item("INCHI").ok().flatten().and_then(|v| v.extract::<String>().ok()).unwrap_or_default();
-        let smiles = dict.get_item("SMILES").ok().flatten().and_then(|v| v.extract::<String>().ok()).unwrap_or_default();
+    for (i, mut spec) in spectrum_list.into_iter().enumerate() {
+        let inchi = spec.metadata.get("INCHI").cloned().unwrap_or_default();
+        let smiles = spec.metadata.get("SMILES").cloned().unwrap_or_default();
         
         let target_mol = if !inchi.is_empty() && inchi != "nan" { inchi.clone() } else { smiles.clone() };
 
@@ -98,24 +94,23 @@ pub fn process_mols<'py>(
 
             // Appliquer les transformations
             for (k, v) in transforms {
-                dict.set_item(k, v)?;
+                spec.metadata.insert(k, v);
             }
         }
 
         // Vérification finale
-        let final_ik = dict.get_item("INCHIKEY").ok().flatten().and_then(|v| v.extract::<String>().ok()).unwrap_or_default();
-        let final_em = dict.get_item("EXACTMASS").ok().flatten().and_then(|v| v.extract::<String>().ok()).unwrap_or_default();
+        let final_ik = spec.metadata.get("INCHIKEY").cloned().unwrap_or_default();
+        let final_em = spec.metadata.get("EXACTMASS").cloned().unwrap_or_default();
         
         if INCHIKEY_PATTERN.is_match(&final_ik) && !final_em.is_empty() && final_em != "nan" {
-            valid_list.append(&item)?;
+            valid_list.push(spec);
         } else {
             deleted_count += 1;
-            dict.set_item("DELETION_REASON", "spectrum deleted because it has neither inchi nor smiles nor inchikey, even after re calculation")?;
+            spec.metadata.insert("DELETION_REASON".to_string(), "spectrum deleted because it has neither inchi nor smiles nor inchikey, even after re calculation".to_string());
             
             let mut row_vals = Vec::new();
             for col in &columns {
-                let val = dict.get_item(col).ok().flatten().and_then(|v| v.extract::<String>().ok()).unwrap_or_default();
-                row_vals.push(val);
+                row_vals.push(spec.metadata.get(*col).cloned().unwrap_or_default());
             }
             deleted_rows.push(row_vals);
         }

@@ -1,6 +1,7 @@
 // src/convertors/msp_to_dict.rs
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PyAny};
+use pyo3::types::{PyList, PyAny};
+use crate::spectrum::Spectrum;
 use rayon::prelude::*;
 use std::collections::HashMap;
 
@@ -12,18 +13,16 @@ struct ParsedSpectrum {
     peaks: Vec<(f64, f64)>, // <-- TUPLES : Fini la fragmentation mémoire !
 }
 
-#[pyfunction]
-#[pyo3(signature = (final_msp_obj, keys_dict, keys_list, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None))]
-pub fn msp_to_dict_processing<'py>(
-    py: Python<'py>,
-    final_msp_obj: &Bound<'py, PyAny>, // Accepte le tunnel ou une liste classique
+pub fn msp_to_dict_processing(
+    py: Python,
+    final_msp_obj: &pyo3::Bound<'_, pyo3::types::PyAny>, // Accepte le tunnel ou une liste classique
     keys_dict: HashMap<String, String>,
     keys_list: Vec<String>,
     progress_callback: Option<PyObject>,
     total_items_callback: Option<PyObject>,
     prefix_callback: Option<PyObject>,
     item_type_callback: Option<PyObject>,
-) -> PyResult<Bound<'py, PyList>> {
+) -> PyResult<Vec<Spectrum>> {
 
     let mut rust_strings: Vec<String> = Vec::new();
 
@@ -41,7 +40,7 @@ pub fn msp_to_dict_processing<'py>(
     if let Some(cb) = &prefix_callback { let _ = cb.call1(py, ("Parsing MSP spectra:",)); }
     if let Some(cb) = &item_type_callback { let _ = cb.call1(py, ("spectra",)); }
 
-    let result_list = PyList::empty_bound(py);
+    let mut result_list = Vec::new();
     let mut processed = 0;
     let chunk_size = 2000;
 
@@ -114,26 +113,24 @@ pub fn msp_to_dict_processing<'py>(
         });
 
         for parsed in parsed_chunk {
-            let final_dict = PyDict::new_bound(py);
+            let mut spec = Spectrum::default();
             for (k, v) in parsed.metadata {
                 if let Some(mapped) = keys_dict.get(&k) {
                     if keys_list.contains(mapped) {
-                        let _ = final_dict.set_item(mapped, v);
+                        spec.metadata.insert(mapped.clone(), v);
                     }
                 }
             }
 
-            if let Some(mapped_peak) = keys_dict.get("peaks") {
-                let _ = final_dict.set_item(mapped_peak, parsed.peaks);
-            } else {
-                let _ = final_dict.set_item("PEAKS_LIST", parsed.peaks);
-            }
+            spec.peaks = parsed.peaks;
 
             for key in &keys_list {
-                if !final_dict.contains(key.as_str()).unwrap_or(false) { let _ = final_dict.set_item(key, ""); }
+                if !spec.metadata.contains_key(key) && key != "PEAKS_LIST" { 
+                    spec.metadata.insert(key.clone(), "".to_string()); 
+                }
             }
 
-            let _ = result_list.append(final_dict);
+            result_list.push(spec);
         }
 
         processed += chunk.len();

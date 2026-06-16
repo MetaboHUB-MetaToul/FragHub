@@ -1,26 +1,15 @@
 // src/splitter.rs
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PyAny};
-use std::collections::HashSet;
+use crate::spectrum::Spectrum;
 
-// Fonction utilitaire pour reconstruire un DataFrame Pandas ultra-rapidement
-fn _build_dataframe_unused<'py>(py: Python<'py>, list: Bound<'py, PyList>, columns: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    let pandas = py.import_bound("pandas")?;
-    let kwargs = PyDict::new_bound(py);
-    kwargs.set_item("columns", columns)?;
-    pandas.call_method("DataFrame", (list,), Some(&kwargs))
-}
-
-#[pyfunction]
-#[pyo3(signature = (spectrum_list, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None))]
-pub fn split_pos_neg<'py>(
-    py: Python<'py>,
-    spectrum_list: &Bound<'py, PyList>,
+pub fn split_pos_neg(
+    py: Python,
+    spectrum_list: &Vec<Spectrum>,
     progress_callback: Option<PyObject>,
     total_items_callback: Option<PyObject>,
     prefix_callback: Option<PyObject>,
     item_type_callback: Option<PyObject>,
-) -> PyResult<(Bound<'py, PyList>, Bound<'py, PyList>)> {
+) -> PyResult<(Vec<Spectrum>, Vec<Spectrum>)> {
     if let Some(cb) = &prefix_callback { cb.call1(py, ("Splitting POS/NEG:",))?; }
     if let Some(cb) = &item_type_callback { cb.call1(py, ("rows",))?; }
 
@@ -28,50 +17,39 @@ pub fn split_pos_neg<'py>(
 
     if let Some(cb) = &total_items_callback { cb.call1(py, (total_items, 0))?; }
 
-    let mut unique_inchikeys = HashSet::new();
-    let pos_list = PyList::empty_bound(py);
-    let neg_list = PyList::empty_bound(py);
+    let mut unique_inchikeys = std::collections::HashSet::new();
+    let mut pos_list = Vec::new();
+    let mut neg_list = Vec::new();
 
-    for item in spectrum_list.iter() {
-        let dict = item.downcast::<PyDict>()?;
-
-        // Stockage des Inchikeys uniques
-        if let Ok(Some(inchikey)) = dict.get_item("INCHIKEY") {
-            if let Ok(inchikey_str) = inchikey.extract::<String>() {
-                unique_inchikeys.insert(inchikey_str);
-            }
+    for spec in spectrum_list.iter() {
+        let inchikey = spec.metadata.get("INCHIKEY").cloned().unwrap_or_default();
+        if !inchikey.is_empty() {
+            unique_inchikeys.insert(inchikey);
         }
 
-        // Triage par pointeurs ! (Aucune donnée n'est dupliquée en RAM)
-        if let Ok(Some(ionmode)) = dict.get_item("IONMODE") {
-            if let Ok(ionmode_str) = ionmode.extract::<String>() {
-                let lower = ionmode_str.to_lowercase();
-                if lower == "positive" {
-                    pos_list.append(&item)?;
-                } else if lower == "negative" {
-                    neg_list.append(&item)?;
-                }
-            }
+        let ionmode = spec.metadata.get("IONMODE").cloned().unwrap_or_default().to_lowercase();
+        if ionmode == "positive" {
+            pos_list.push(spec.clone());
+        } else if ionmode == "negative" {
+            neg_list.push(spec.clone());
         }
     }
 
-        if let Some(cb) = &progress_callback { cb.call1(py, (pos_list.len(),))?; }
+    if let Some(cb) = &progress_callback { cb.call1(py, (pos_list.len(),))?; }
     if let Some(cb) = &progress_callback { cb.call1(py, (total_items,))?; }
 
     Ok((pos_list, neg_list))
 }
 
-#[pyfunction]
-#[pyo3(signature = (pos_list, neg_list, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None))]
-pub fn split_LC_GC<'py>(
-    py: Python<'py>,
-    pos_list: &Bound<'py, PyList>,
-    neg_list: &Bound<'py, PyList>,
+pub fn split_lc_gc(
+    py: Python,
+    pos_list: &Vec<Spectrum>,
+    neg_list: &Vec<Spectrum>,
     progress_callback: Option<PyObject>,
     total_items_callback: Option<PyObject>,
     prefix_callback: Option<PyObject>,
     item_type_callback: Option<PyObject>,
-) -> PyResult<(Bound<'py, PyList>, Bound<'py, PyList>, Bound<'py, PyList>, Bound<'py, PyList>)> {
+) -> PyResult<(Vec<Spectrum>, Vec<Spectrum>, Vec<Spectrum>, Vec<Spectrum>)> {
     if let Some(cb) = &prefix_callback { cb.call1(py, ("Splitting LC/GC:",))?; }
     if let Some(cb) = &item_type_callback { cb.call1(py, ("rows",))?; }
 
@@ -81,27 +59,18 @@ pub fn split_LC_GC<'py>(
 
     if let Some(cb) = &total_items_callback { cb.call1(py, (total_rows, 0))?; }
 
-    let partition_lc_gc = |list: &Bound<'py, PyList>| -> PyResult<(Bound<'py, PyList>, Bound<'py, PyList>)> {
-        let lc_list = PyList::empty_bound(py);
-        let gc_list = PyList::empty_bound(py);
+    let partition_lc_gc = |list: &Vec<Spectrum>| -> PyResult<(Vec<Spectrum>, Vec<Spectrum>)> {
+        let mut lc_list = Vec::new();
+        let mut gc_list = Vec::new();
         if list.len() > 0 {
-            for item in list.iter() {
-                let dict = item.downcast::<PyDict>()?;
-
-                let mut is_gc = false;
-                if let Ok(Some(instr)) = dict.get_item("INSTRUMENTTYPE") {
-                    if let Ok(instr_str) = instr.extract::<String>() {
-                        let upper = instr_str.to_uppercase();
-                        if upper.contains("GC") || upper.contains("EI") {
-                            is_gc = true;
-                        }
-                    }
-                }
+            for spec in list.iter() {
+                let instr = spec.metadata.get("INSTRUMENTTYPE").cloned().unwrap_or_default().to_uppercase();
+                let is_gc = instr.contains("GC") || instr.contains("EI");
 
                 if is_gc {
-                    gc_list.append(&item)?;
+                    gc_list.push(spec.clone());
                 } else {
-                    lc_list.append(&item)?;
+                    lc_list.push(spec.clone());
                 }
             }
         }
@@ -119,47 +88,35 @@ pub fn split_LC_GC<'py>(
     Ok((pos_lc_list, pos_gc_list, neg_lc_list, neg_gc_list))
 }
 
-#[pyfunction]
-#[pyo3(signature = (pos_lc, pos_gc, neg_lc, neg_gc, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None))]
-pub fn exp_in_silico_splitter<'py>(
-    py: Python<'py>,
-    pos_lc: &Bound<'py, PyList>,
-    pos_gc: &Bound<'py, PyList>,
-    neg_lc: &Bound<'py, PyList>,
-    neg_gc: &Bound<'py, PyList>,
+pub fn exp_in_silico_splitter(
+    py: Python,
+    pos_lc: &Vec<Spectrum>,
+    pos_gc: &Vec<Spectrum>,
+    neg_lc: &Vec<Spectrum>,
+    neg_gc: &Vec<Spectrum>,
     progress_callback: Option<PyObject>,
     total_items_callback: Option<PyObject>,
     prefix_callback: Option<PyObject>,
     item_type_callback: Option<PyObject>,
 ) -> PyResult<(
-    Bound<'py, PyList>, Bound<'py, PyList>,
-Bound<'py, PyList>, Bound<'py, PyList>,
-Bound<'py, PyList>, Bound<'py, PyList>,
-Bound<'py, PyList>, Bound<'py, PyList>
+    Vec<Spectrum>, Vec<Spectrum>,
+    Vec<Spectrum>, Vec<Spectrum>,
+    Vec<Spectrum>, Vec<Spectrum>,
+    Vec<Spectrum>, Vec<Spectrum>
 )> {
 
     // Fonction intégrée pour simuler les multiples appels de votre fonction Python "split_in_silico_exp"
-    let emulate_split_in_silico_exp = |list: &Bound<'py, PyList>, text_true: &str, text_false: &str| -> PyResult<(Bound<'py, PyList>, Bound<'py, PyList>)> {
-        let exp_list = PyList::empty_bound(py);
-        let in_silico_list = PyList::empty_bound(py);
+    let emulate_split_in_silico_exp = |list: &Vec<Spectrum>, text_true: &str, text_false: &str| -> PyResult<(Vec<Spectrum>, Vec<Spectrum>)> {
+        let mut exp_list = Vec::new();
+        let mut in_silico_list = Vec::new();
         let len = list.len();
         if len > 0 {
-            for item in list.iter() {
-                let dict = item.downcast::<PyDict>()?;
-
-                if let Ok(Some(pred)) = dict.get_item("PREDICTED") {
-                    if let Ok(pred_str) = pred.extract::<String>() {
-                        let lower = pred_str.to_lowercase();
-                        if lower == "true" {
-                            in_silico_list.append(&item)?;
-                        } else {
-                            exp_list.append(&item)?;
-                        }
-                    } else {
-                        exp_list.append(&item)?;
-                    }
+            for spec in list.iter() {
+                let pred = spec.metadata.get("PREDICTED").cloned().unwrap_or_default().to_lowercase();
+                if pred == "true" {
+                    in_silico_list.push(spec.clone());
                 } else {
-                    exp_list.append(&item)?;
+                    exp_list.push(spec.clone());
                 }
             }
 

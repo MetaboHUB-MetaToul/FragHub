@@ -1,6 +1,7 @@
 // src/de_novo_calculation.rs
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PyAny};
+use pyo3::types::{PyDict, PyAny};
+use crate::spectrum::Spectrum;
 use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
 use once_cell::sync::Lazy;
@@ -276,17 +277,15 @@ fn process_spectrum_peaks(formula: &str, peaks_list_str: &str, ppm_tol: f64) -> 
     new_peaks_list
 }
 
-#[pyfunction]
-#[pyo3(signature = (spectrum_list, parameters_dict_py, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None))]
-pub fn de_novo_calculation_processing<'py>(
-    py: Python<'py>,
-    spectrum_list: &Bound<'py, PyList>,
-    parameters_dict_py: Bound<'py, PyDict>,
+pub fn de_novo_calculation_processing(
+    py: Python,
+    mut spectrum_list: Vec<Spectrum>,
+    parameters_dict_py: pyo3::Bound<'_, pyo3::types::PyDict>,
     progress_callback: Option<PyObject>,
     total_items_callback: Option<PyObject>,
     prefix_callback: Option<PyObject>,
     item_type_callback: Option<PyObject>,
-) -> PyResult<Bound<'py, PyList>> {
+) -> PyResult<Vec<Spectrum>> {
 
     if let Some(cb) = &prefix_callback { cb.call1(py, ("Calculating de novo formulas (Rust):",))?; }
     if let Some(cb) = &item_type_callback { cb.call1(py, ("spectra",))?; }
@@ -302,28 +301,24 @@ pub fn de_novo_calculation_processing<'py>(
         5.0
     };
 
-    let mut rust_spectra = Vec::with_capacity(total_items);
-    for item in spectrum_list.iter() {
-        let dict = item.downcast::<PyDict>()?;
-        let mut meta = HashMap::new();
-        for (k, v) in dict.iter() {
-            meta.insert(k.extract::<String>()?, v.extract::<String>().unwrap_or_else(|_| v.to_string()));
-        }
-        rust_spectra.push(meta);
-    }
-
     let chunk_size = 500;
     let mut processed = 0;
 
-    for chunk in rust_spectra.chunks_mut(chunk_size) {
+    for chunk in spectrum_list.chunks_mut(chunk_size) {
         py.allow_threads(|| {
-            chunk.par_iter_mut().for_each(|meta| {
-                let formula = meta.get("FORMULA").cloned().unwrap_or_default();
-                let peaks_list = meta.get("PEAKS_LIST").cloned().unwrap_or_default();
+            chunk.par_iter_mut().for_each(|spec| {
+                let formula = spec.metadata.get("FORMULA").cloned().unwrap_or_default();
+
+                // Format the native peaks back to String to reuse the de novo logic (temporarily)
+                let mut peaks_list = String::with_capacity(spec.peaks.len() * 20);
+                for (i, &(mz, int)) in spec.peaks.iter().enumerate() {
+                    if i > 0 { peaks_list.push('\n'); }
+                    peaks_list.push_str(&format!("{} {}", mz, int));
+                }
 
                 if !formula.is_empty() && !peaks_list.is_empty() && peaks_list != "nan" {
                     let updated_peaks = process_spectrum_peaks(&formula, &peaks_list, ppm_tol);
-                    meta.insert("PEAKS_LIST".to_string(), updated_peaks);
+                    spec.metadata.insert("PEAKS_LIST".to_string(), updated_peaks);
                 }
             });
         });
@@ -332,12 +327,5 @@ pub fn de_novo_calculation_processing<'py>(
         if let Some(cb) = &progress_callback { cb.call1(py, (processed,))?; }
     }
 
-    let py_final_list = PyList::empty_bound(py);
-    for meta in rust_spectra {
-        let py_dict = PyDict::new_bound(py);
-        for (k, v) in meta { py_dict.set_item(k, v)?; }
-        py_final_list.append(py_dict)?;
-    }
-
-    Ok(py_final_list)
+    Ok(spectrum_list)
 }

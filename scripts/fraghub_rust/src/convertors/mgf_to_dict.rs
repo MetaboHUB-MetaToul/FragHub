@@ -1,7 +1,8 @@
 // src/convertors/mgf_to_dict.rs
 
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList};
+use pyo3::types::{PyList};
+use crate::spectrum::Spectrum;
 use rayon::prelude::*;
 use std::collections::HashMap;
 
@@ -11,10 +12,8 @@ struct ParsedSpectrum {
     peaks: Vec<Vec<f64>>,
 }
 
-#[pyfunction]
-#[pyo3(signature = (final_mgf, keys_dict, keys_list, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None))]
-pub fn mgf_to_dict_processing<'py>(
-    py: Python<'py>,
+pub fn mgf_to_dict_processing(
+    py: Python,
     final_mgf: Vec<String>,
     keys_dict: HashMap<String, String>,
     keys_list: Vec<String>,
@@ -22,13 +21,13 @@ pub fn mgf_to_dict_processing<'py>(
     total_items_callback: Option<PyObject>,
     prefix_callback: Option<PyObject>,
     item_type_callback: Option<PyObject>,
-) -> PyResult<Bound<'py, PyList>> {
+) -> PyResult<Vec<Spectrum>> {
     let total = final_mgf.len();
     if let Some(cb) = &total_items_callback { cb.call1(py, (total, 0))?; }
     if let Some(cb) = &prefix_callback { cb.call1(py, ("Parsing MGF spectrums:",))?; }
     if let Some(cb) = &item_type_callback { cb.call1(py, ("spectra",))?; }
 
-    let result_list = PyList::empty_bound(py);
+    let mut result_list = Vec::new();
     let mut processed = 0;
 
     // Découpage par paquets (chunks) comme dans votre version Python
@@ -80,32 +79,30 @@ pub fn mgf_to_dict_processing<'py>(
         }).collect();
 
         // ====================================================================
-        // ÉTAPE 2 : RETOUR À PYTHON (Mapping et création du dictionnaire)
+        // ÉTAPE 2 : Mapping et création du dictionnaire (RUST NATIVE)
         // ====================================================================
         for parsed in parsed_chunk {
-            let final_dict = PyDict::new_bound(py);
+            let mut spec = Spectrum::default();
 
             for (k, v) in parsed.metadata {
                 if let Some(mapped) = keys_dict.get(&k) {
                     if keys_list.contains(mapped) {
-                        final_dict.set_item(mapped, v)?;
+                        spec.metadata.insert(mapped.clone(), v);
                     }
                 }
             }
 
             // Ajout de la liste de pics
-            if let Some(mapped_peak) = keys_dict.get("peaks") {
-                final_dict.set_item(mapped_peak, parsed.peaks)?;
-            } else {
-                final_dict.set_item("PEAKS_LIST", parsed.peaks)?;
-            }
+            spec.peaks = parsed.peaks.into_iter().map(|p| (p[0], p[1])).collect();
 
             // Complétion des clés manquantes
             for key in &keys_list {
-                if !final_dict.contains(key)? { final_dict.set_item(key, "")?; }
+                if !spec.metadata.contains_key(key) && key != "PEAKS_LIST" { 
+                    spec.metadata.insert(key.clone(), "".to_string()); 
+                }
             }
 
-            result_list.append(final_dict)?;
+            result_list.push(spec);
         }
 
         // ====================================================================

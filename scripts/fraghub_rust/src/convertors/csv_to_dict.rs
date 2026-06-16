@@ -1,6 +1,6 @@
 // src/convertors/csv_to_dict.rs
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList};
+use crate::spectrum::Spectrum;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -38,10 +38,8 @@ fn parse_peak_list_native(peak_list_string: &str) -> Vec<(f64, f64)> {
 }
 
 // 3. La fonction principale qui remplace Pandas et csv_to_dict_processing
-#[pyfunction]
-#[pyo3(signature = (csv_files, keys_dict, keys_list, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None))]
-pub fn load_and_parse_csv<'py>(
-    py: Python<'py>,
+pub fn load_and_parse_csv(
+    py: Python,
     csv_files: Vec<String>,
     keys_dict: HashMap<String, String>,
     keys_list: Vec<String>,
@@ -49,14 +47,14 @@ pub fn load_and_parse_csv<'py>(
     total_items_callback: Option<PyObject>,
     prefix_callback: Option<PyObject>,
     item_type_callback: Option<PyObject>,
-) -> PyResult<Bound<'py, PyList>> {
+) -> PyResult<Vec<Spectrum>> {
 
     let total_files = csv_files.len();
     if let Some(cb) = &total_items_callback { let _ = cb.call1(py, (total_files, 0)); }
     if let Some(cb) = &prefix_callback { let _ = cb.call1(py, ("Reading CSV files:",)); }
     if let Some(cb) = &item_type_callback { let _ = cb.call1(py, ("csv_files",)); }
 
-    let result_list = PyList::empty_bound(py);
+    let mut result_list = Vec::new();
     let mut processed_files = 0;
 
     for file_path in csv_files {
@@ -83,54 +81,34 @@ pub fn load_and_parse_csv<'py>(
 
         for result in rdr.records() {
             let record = result.map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
-            let final_dict = PyDict::new_bound(py);
-            let mut peaks_parsed = false;
+            let mut spec = Spectrum::default();
 
-            let _ = final_dict.set_item("filename", &filename);
-            let _ = final_dict.set_item("filehash", &file_hash);
+            spec.metadata.insert("FILENAME".to_string(), filename.clone());
+            spec.metadata.insert("FILEHASH".to_string(), file_hash.clone());
 
             for (i, field) in record.iter().enumerate() {
                 if i >= headers.len() { continue; }
                 let header = &headers[i];
 
-                // --- PARSING DES PICS ---
                 if header == "peaks" || header == "peaks_list" {
-                    let parsed_peaks = parse_peak_list_native(field);
-                    if let Some(mapped_peak) = keys_dict.get("peaks") {
-                        let _ = final_dict.set_item(mapped_peak, parsed_peaks);
-                    } else {
-                        let _ = final_dict.set_item("PEAKS_LIST", parsed_peaks);
-                    }
-                    peaks_parsed = true;
+                    spec.peaks = parse_peak_list_native(field);
                     continue;
                 }
 
-                // --- CONVERSION DES CLES CLASSIQUES ---
                 if let Some(mapped_key) = keys_dict.get(header) {
                     if keys_list.contains(mapped_key) {
-                        let _ = final_dict.set_item(mapped_key, field);
+                        spec.metadata.insert(mapped_key.clone(), field.to_string());
                     }
                 }
             }
 
-            // Sécurité : si aucune colonne peaks n'a été trouvée mais requise
-            if !peaks_parsed {
-                let empty_peaks: Vec<(f64, f64)> = Vec::new();
-                if let Some(mapped_peak) = keys_dict.get("peaks") {
-                    let _ = final_dict.set_item(mapped_peak, empty_peaks);
-                } else {
-                    let _ = final_dict.set_item("PEAKS_LIST", empty_peaks);
-                }
-            }
-
-            // --- COMPLETION DES CLES MANQUANTES ---
             for key in &keys_list {
-                if !final_dict.contains(key).unwrap_or(false) {
-                    let _ = final_dict.set_item(key, "");
+                if !spec.metadata.contains_key(key) && key != "PEAKS_LIST" {
+                    spec.metadata.insert(key.clone(), "".to_string());
                 }
             }
 
-            let _ = result_list.append(final_dict);
+            result_list.push(spec);
         }
 
         processed_files += 1;

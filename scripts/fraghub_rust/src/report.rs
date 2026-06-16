@@ -1,51 +1,46 @@
 // src/report.rs
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyAny, PyList};
+use pyo3::types::{PyDict, PyList};
+use crate::spectrum::Spectrum;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 
-// Fonction utilitaire pour extraire la taille et les INCHIKEYs uniques d'un DataFrame via PyO3
+// Fonction utilitaire pour extraire la taille et les INCHIKEYs uniques d'un Vec<Spectrum>
 
-fn get_df_stats(list: &Bound<'_, PyAny>) -> PyResult<(usize, usize)> {
-    let length: usize = list.len()?;
+fn get_df_stats(list: &Vec<Spectrum>) -> PyResult<(usize, usize)> {
+    let length = list.len();
     let mut unique = 0;
     if length > 0 {
-        if let Ok(l) = list.downcast::<PyList>() {
-            let mut unique_set = std::collections::HashSet::new();
-            for item in l.iter() {
-                if let Ok(dict) = item.downcast::<PyDict>() {
-                    if let Ok(Some(val)) = dict.get_item("INCHIKEY") {
-                        let s = val.to_string();
-                        if !s.is_empty() && s.to_lowercase() != "nan" {
-                            unique_set.insert(s);
-                        }
-                    }
+        let mut unique_set = std::collections::HashSet::new();
+        for spec in list {
+            if let Some(val) = spec.metadata.get("INCHIKEY") {
+                let s = val.to_string();
+                if !s.is_empty() && s.to_lowercase() != "nan" {
+                    unique_set.insert(s);
                 }
             }
-            unique = unique_set.len();
         }
+        unique = unique_set.len();
     }
     Ok((length, unique))
 }
 
 
-#[pyfunction]
-#[pyo3(signature = (output_directory, date_str, parameters_dict, deletion_dict, pos_lc, pos_lc_insilico, pos_gc, pos_gc_insilico, neg_lc, neg_lc_insilico, neg_gc, neg_gc_insilico))]
-pub fn generate_report_processing<'py>(
-    py: Python<'py>,
+pub fn generate_report_processing(
+    py: Python,
     output_directory: String,
     date_str: String,
-    parameters_dict: &Bound<'py, PyDict>,
-    deletion_dict: &Bound<'py, PyDict>,
-    pos_lc: &Bound<'py, PyAny>,
-    pos_lc_insilico: &Bound<'py, PyAny>,
-    pos_gc: &Bound<'py, PyAny>,
-    pos_gc_insilico: &Bound<'py, PyAny>,
-    neg_lc: &Bound<'py, PyAny>,
-    neg_lc_insilico: &Bound<'py, PyAny>,
-    neg_gc: &Bound<'py, PyAny>,
-    neg_gc_insilico: &Bound<'py, PyAny>,
+    parameters_dict: &pyo3::Bound<'_, pyo3::types::PyDict>,
+    deletion_dict: &pyo3::Bound<'_, pyo3::types::PyDict>,
+    pos_lc: &Vec<Spectrum>,
+    pos_lc_insilico: &Vec<Spectrum>,
+    pos_gc: &Vec<Spectrum>,
+    pos_gc_insilico: &Vec<Spectrum>,
+    neg_lc: &Vec<Spectrum>,
+    neg_lc_insilico: &Vec<Spectrum>,
+    neg_gc: &Vec<Spectrum>,
+    neg_gc_insilico: &Vec<Spectrum>,
 ) -> PyResult<()> {
 
     // 1. Extraction des statistiques des 8 DataFrames

@@ -1,23 +1,21 @@
 // src/update_checker.rs
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList};
+use crate::spectrum::Spectrum;
 use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 use csv::WriterBuilder;
 
-#[pyfunction]
-#[pyo3(signature = (spectrum_list, output_directory, ordered_columns, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None))]
-pub fn check_for_update_processing<'py>(
-    py: Python<'py>,
-    spectrum_list: Bound<'py, PyList>,
+pub fn check_for_update_processing(
+    py: Python,
+    mut spectrum_list: Vec<Spectrum>,
     output_directory: String,
     ordered_columns: Vec<String>,
     progress_callback: Option<PyObject>,
     total_items_callback: Option<PyObject>,
     prefix_callback: Option<PyObject>,
     item_type_callback: Option<PyObject>,
-) -> PyResult<(Bound<'py, PyList>, bool, usize)> {
+) -> PyResult<(Vec<Spectrum>, bool, usize)> {
 
     let total_items = spectrum_list.len();
 
@@ -50,13 +48,8 @@ pub fn check_for_update_processing<'py>(
     let mut processed = 0;
 
     // 2. Parcourir les spectres
-    for i in 0..total_items {
-        let item = spectrum_list.get_item(i).unwrap();
-        let dict = item.downcast::<PyDict>()?;
-
-        let splash = if let Ok(Some(s)) = dict.get_item("SPLASH") {
-            if let Ok(s_str) = s.str() { s_str.to_str().unwrap_or("").to_string() } else { String::new() }
-        } else { String::new() };
+    for (i, spec) in spectrum_list.iter().enumerate() {
+        let splash = spec.metadata.get("SPLASH").cloned().unwrap_or_default();
 
         if !splash.is_empty() && splash_set.contains(&splash) {
             indices_to_delete.push(i); // Déjà vu -> on supprime
@@ -90,20 +83,11 @@ pub fn check_for_update_processing<'py>(
         wtr.write_record(&header).map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
 
         for &idx in &indices_to_delete {
-            let item = spectrum_list.get_item(idx).unwrap();
-            let dict = item.downcast::<PyDict>()?;
+            let spec = &spectrum_list[idx];
             let mut record: Vec<String> = Vec::with_capacity(ordered_columns.len() + 1);
 
             for col in &ordered_columns {
-                if let Ok(Some(val)) = dict.get_item(col) {
-                    if let Ok(val_str) = val.str() {
-                        if let Ok(s) = val_str.to_str() {
-                            record.push(s.to_string());
-                            continue;
-                        }
-                    }
-                }
-                record.push(String::new());
+                record.push(spec.metadata.get(col).cloned().unwrap_or_default());
             }
             record.push("spectrum deleted because already processed in a previous run.".to_string());
             wtr.write_record(&record).map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
@@ -119,7 +103,6 @@ pub fn check_for_update_processing<'py>(
                 obj.insert(s, serde_json::json!(true));
             }
         } else {
-            // Si le fichier JSON était corrompu, on recrée l'objet
             let mut new_obj = serde_json::Map::new();
             for s in new_splashes {
                 new_obj.insert(s, serde_json::json!(true));
@@ -131,10 +114,14 @@ pub fn check_for_update_processing<'py>(
         serde_json::to_writer_pretty(file, &json_data).map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
     }
 
-    // 5. Générer la liste Python finale
-    let final_list = PyList::empty_bound(py);
-    for &idx in &indices_to_keep {
-        final_list.append(spectrum_list.get_item(idx).unwrap())?;
+    // 5. Générer la liste finale
+    let mut final_list = Vec::with_capacity(indices_to_keep.len());
+    let mut current_idx = 0;
+    for spec in spectrum_list.into_iter() {
+        if indices_to_keep.contains(&current_idx) {
+            final_list.push(spec);
+        }
+        current_idx += 1;
     }
 
     // ⚠️ GARANTIE DU 100%

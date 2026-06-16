@@ -1,17 +1,15 @@
 // src/complete_from_pubchem_datas.rs
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PyAny};
+use crate::spectrum::Spectrum;
 
-#[pyfunction]
-#[pyo3(signature = (spectrum_list, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None))]
-pub fn complete_from_pubchem_datas<'py>(
-    py: Python<'py>,
-    spectrum_list: &Bound<'py, PyList>,
+pub fn complete_from_pubchem_datas(
+    py: Python,
+    mut spectrum_list: Vec<Spectrum>,
     progress_callback: Option<PyObject>,
     total_items_callback: Option<PyObject>,
     prefix_callback: Option<PyObject>,
     item_type_callback: Option<PyObject>,
-) -> PyResult<Bound<'py, PyList>> {
+) -> PyResult<Vec<Spectrum>> {
 
     // --- Step 1: Initialization ---
     if let Some(cb) = &prefix_callback { cb.call1(py, ("enriching data from PubChem (Rust):",))?; }
@@ -28,19 +26,15 @@ pub fn complete_from_pubchem_datas<'py>(
     let mut processed = 0;
 
     // --- Step 3: Boucle de mise à jour ---
-    for item in spectrum_list.iter() {
-        let row = item.downcast::<PyDict>()?;
+    for spec in spectrum_list.iter_mut() {
+        let inchikey = spec.metadata.get("INCHIKEY").cloned().unwrap_or_default();
 
-        if let Ok(Some(inchikey_py)) = row.get_item("INCHIKEY") {
-            let inchikey = inchikey_py.extract::<String>().unwrap_or_default();
-
-            if !inchikey.is_empty() && inchikey.to_lowercase() != "nan" {
-                if let Some(pubchem_row) = pubchem_dict.get(&inchikey) {
-                    for col in columns_to_update {
-                        if let Some(new_val) = pubchem_row.get(col) {
-                            if !new_val.trim().is_empty() && new_val.to_lowercase() != "nan" {
-                                row.set_item(col, new_val)?;
-                            }
+        if !inchikey.is_empty() && inchikey.to_lowercase() != "nan" {
+            if let Some(pubchem_row) = pubchem_dict.get(&inchikey) {
+                for col in columns_to_update {
+                    if let Some(new_val) = pubchem_row.get(col) {
+                        if !new_val.trim().is_empty() && new_val.to_lowercase() != "nan" {
+                            spec.metadata.insert(col.to_string(), new_val.clone());
                         }
                     }
                 }
@@ -56,5 +50,5 @@ pub fn complete_from_pubchem_datas<'py>(
 
     if let Some(cb) = &progress_callback { cb.call1(py, (total_items,))?; }
 
-    Ok(spectrum_list.clone())
+    Ok(spectrum_list)
 }

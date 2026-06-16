@@ -28,7 +28,7 @@ impl DeletionReport {
     }
 
     // Transforme l'objet Rust en dictionnaire Python pour la génération finale du fichier texte
-    pub fn to_dict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+    pub fn to_dict<'py2>(&self, py: Python<'py2>) -> PyResult<Bound<'py2, PyDict>> {
         let dict = PyDict::new_bound(py);
         dict.set_item("duplicatas_removed", self.duplicatas_removed)?;
         dict.set_item("previously_cleaned", self.previously_cleaned)?;
