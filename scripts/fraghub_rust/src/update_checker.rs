@@ -42,7 +42,8 @@ pub fn check_for_update_processing(
         }
     }
 
-    let mut indices_to_keep = Vec::new();
+    // --- CORRECTION : Utilisation d'un HashSet pour une recherche en O(1) ---
+    let mut indices_to_keep: HashSet<usize> = HashSet::new();
     let mut indices_to_delete = Vec::new();
     let mut new_splashes = Vec::new();
     let mut processed = 0;
@@ -54,7 +55,8 @@ pub fn check_for_update_processing(
         if !splash.is_empty() && splash_set.contains(&splash) {
             indices_to_delete.push(i); // Déjà vu -> on supprime
         } else {
-            indices_to_keep.push(i); // Nouveau -> on garde
+            // --- CORRECTION : Utilisation de .insert() au lieu de .push() ---
+            indices_to_keep.insert(i); // Nouveau -> on garde
             if !splash.is_empty() {
                 new_splashes.push(splash);
             }
@@ -114,7 +116,7 @@ pub fn check_for_update_processing(
         serde_json::to_writer_pretty(file, &json_data).map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
     }
 
-    // 5. Générer la liste finale
+    // 5. Générer la liste finale (Sera maintenant quasi instantané)
     let mut final_list = Vec::with_capacity(indices_to_keep.len());
     let mut current_idx = 0;
     for spec in spectrum_list.into_iter() {
