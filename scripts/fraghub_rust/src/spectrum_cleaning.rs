@@ -13,7 +13,7 @@ pub fn spectrum_cleaning_processing(
     spectrum_list: Vec<Spectrum>,
     output_directory: String,
     ordered_columns: Vec<String>,
-    deletion_report_obj: pyo3::Bound<'_, pyo3::types::PyAny>, // <-- NOUVEL ARGUMENT : L'objet DeletionReport !
+    deletion_report_obj: pyo3::Bound<'_, pyo3::types::PyAny>,
     parameters_dict_py: pyo3::Bound<'_, pyo3::types::PyDict>,
     progress_callback: Option<PyObject>,
     total_items_callback: Option<PyObject>,
@@ -28,7 +28,6 @@ pub fn spectrum_cleaning_processing(
     if let Some(cb) = &prefix_callback { cb.call1(py, ("cleaning spectrums:",))?; }
     if let Some(cb) = &item_type_callback { cb.call1(py, ("spectra",))?; }
 
-    
     let mut parameters_dict: HashMap<String, f64> = HashMap::new();
     if let Ok(dict) = parameters_dict_py.downcast::<PyDict>() {
         for (k, v) in dict.iter() {
@@ -54,6 +53,8 @@ pub fn spectrum_cleaning_processing(
     // 2. Traitement Multithreadé (Rayon)
     let chunk_size = 2000;
     let mut processed = 0;
+
+    // CORRECTION : On stocke maintenant un tuple (metadata, peaks) pour ne pas perdre les pics !
     let mut kept_spectra = Vec::new();
     let mut deleted_spectra: HashMap<String, Vec<HashMap<String, String>>> = HashMap::new();
 
@@ -124,7 +125,8 @@ pub fn spectrum_cleaning_processing(
                     }
                     valid_meta.insert("PEAKS_LIST".to_string(), formatted_peaks);
 
-                    Ok(valid_meta)
+                    // CORRECTION : On retourne les métadonnées ET les pics filtrés
+                    Ok((valid_meta, peaks))
                 } else {
                     Err((meta, deletion_reason.unwrap_or_else(|| "Unknown deletion reason".to_string())))
                 }
@@ -134,7 +136,7 @@ pub fn spectrum_cleaning_processing(
         // Répartition des succès et des erreurs
         for res in results {
             match res {
-                Ok(meta) => kept_spectra.push(meta),
+                Ok((meta, peaks)) => kept_spectra.push((meta, peaks)), // CORRECTION : on sauvegarde le tuple
                 Err((mut meta, reason)) => {
                     meta.insert("DELETION_REASON".to_string(), reason.clone());
                     deleted_spectra.entry(reason).or_default().push(meta);
@@ -209,9 +211,10 @@ pub fn spectrum_cleaning_processing(
 
     // 5. Reconstruction de la liste finale
     let mut final_list = Vec::with_capacity(kept_spectra.len());
-    for meta in kept_spectra {
+    for (meta, peaks) in kept_spectra {
         let mut spec = Spectrum::default();
         spec.metadata = meta;
+        spec.peaks = peaks; // CORRECTION : On réinjecte le tableau de pics dans l'objet final !
         final_list.push(spec);
     }
 
