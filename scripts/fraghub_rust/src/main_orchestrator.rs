@@ -17,7 +17,6 @@ use crate::ontologies_completion::ontologies_completion_processing;
 use crate::de_novo_calculation::de_novo_calculation_processing;
 use crate::normalize_to_not_found::normalize_to_not_found_processing;
 
-// ---> IMPORT MODIFIÉ ICI <---
 use crate::splitter::master_splitter;
 
 use crate::csv_to_msp::csv_to_msp_processing;
@@ -170,6 +169,24 @@ pub fn main_orchestrator(
             progress_callback.clone(), total_items_callback.clone(), prefix_callback.clone(), item_type_callback.clone()
         )?;
 
+        // ---> AJOUT DU BLOC DELETION CALLBACK (COMME EN PYTHON) <---
+        if let Some(cb) = &deletion_callback {
+            let report = deletion_report_bound.borrow();
+            let msg = format!(
+                "\n                No peaks list: {}\n                No smiles, no inchi, no inchikey: {}\n                No precursor mz: {}\n                No or bad adduct: {}\n                Low entropy score: {}\n                Minimum peaks not required: {}\n                All peaks above precursor mz: {}\n                No peaks in mz range: {}\n                Minimum high peaks not required: {}\n                ",
+                report.no_peaks_list,
+                report.no_smiles_no_inchi_no_inchikey,
+                report.no_precursor_mz,
+                report.no_or_bad_adduct, // Intégré ici
+                report.low_entropy_score,
+                report.minimum_peaks_not_requiered,
+                report.all_peaks_above_precursor_mz,
+                report.no_peaks_in_mz_range,
+                report.minimum_high_peaks_not_requiered
+            );
+            cb.call1(py, (msg,))?;
+        }
+
         if spectrum_list.is_empty() {
             if let Some(cb) = &deletion_callback { cb.call1(py, ("-- THERE IS NO SPECTRUMS TO PROCESS AFTER CLEANING --",))?; }
             return Ok(0);
@@ -185,6 +202,13 @@ pub fn main_orchestrator(
             py, spectrum_list, &output_directory, &deletion_report_bound.clone().into_any(),
             progress_callback.clone(), total_items_callback.clone(), prefix_callback.clone(), item_type_callback.clone()
         )?;
+
+        // ---> AJOUT DE LA MISE À JOUR MOLS (COMME EN PYTHON) <---
+        if let Some(cb) = &deletion_callback {
+            let report = deletion_report_bound.borrow();
+            cb.call1(py, (format!("No smiles, no inchi, no inchikey (updated): {}", report.no_smiles_no_inchi_no_inchikey),))?;
+        }
+
         check_stop_flag()?;
 
         // STEP 7: PUBCHEM
@@ -222,7 +246,6 @@ pub fn main_orchestrator(
 
         spectrum_list = normalize_to_not_found_processing(py, spectrum_list)?;
 
-        // ---> STEP 10 MODIFIÉ ICI <---
         // STEP 10: SPLITTING
         py.allow_threads(|| { std::thread::sleep(std::time::Duration::from_millis(10)); });
         if let Some(cb) = &step_callback { cb.call1(py, ("--  SPLITTING SPECTRUMS --",))?; }
@@ -304,7 +327,8 @@ pub fn main_orchestrator(
 
         if let Some(cb) = &deletion_callback {
             let report = deletion_report_bound.borrow();
-            let total_deletions = report.duplicatas_removed + report.previously_cleaned + report.no_peaks_list + report.no_smiles_no_inchi_no_inchikey + report.no_precursor_mz + report.low_entropy_score + report.minimum_peaks_not_requiered + report.all_peaks_above_precursor_mz + report.no_peaks_in_mz_range + report.minimum_high_peaks_not_requiered;
+            // ---> CORRECTION : J'ai ajouté no_or_bad_adduct dans le total des suppressions <---
+            let total_deletions = report.duplicatas_removed + report.previously_cleaned + report.no_peaks_list + report.no_smiles_no_inchi_no_inchikey + report.no_precursor_mz + report.no_or_bad_adduct + report.low_entropy_score + report.minimum_peaks_not_requiered + report.all_peaks_above_precursor_mz + report.no_peaks_in_mz_range + report.minimum_high_peaks_not_requiered;
             cb.call1(py, (format!("Total deletions: {}", total_deletions),))?;
         }
 
