@@ -11,11 +11,8 @@ use rayon::prelude::*;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
-// Définies globalement pour être réutilisées instantanément par les multiples threads
 static RE_3: Lazy<Regex> = Lazy::new(|| Regex::new(r#"\[\n\s*(-?[\d\.eE\+\-]+),\n\s*(-?[\d\.eE\+\-]+),\n\s*"(.*?)"\n\s*\]"#).unwrap());
 static RE_2: Lazy<Regex> = Lazy::new(|| Regex::new(r#"\[\n\s*(-?[\d\.eE\+\-]+),\n\s*(-?[\d\.eE\+\-]+)\n\s*\]"#).unwrap());
-
-// ======================== ORCHESTRATEURS EXPOSÉS À PYTHON ========================
 
 #[allow(clippy::too_many_arguments)]
 pub fn writting_msp_processing(
@@ -43,7 +40,6 @@ pub fn writting_msp_processing(
     let global_processed = Arc::new(AtomicUsize::new(0));
     let progress_cb = progress_callback.clone();
 
-    // Multithreading sur les fichiers complets
     let results: Vec<Result<(), String>> = py.allow_threads(|| {
         tasks.par_iter().map(|(data_list, filename, mode)| {
             if data_list.is_empty() { return Ok(()); }
@@ -60,7 +56,6 @@ pub fn writting_msp_processing(
                 file.write_all(b"\n\n").map_err(|e| e.to_string())?;
 
                 local_processed += 1;
-                // Mise à jour groupée pour éviter les saturations
                 if local_processed % 5000 == 0 {
                     let current = global_processed.fetch_add(5000, Ordering::Relaxed) + 5000;
                     if let Some(ref cb) = progress_cb {
@@ -81,7 +76,6 @@ pub fn writting_msp_processing(
         }).collect()
     });
 
-    // Remontée des éventuelles erreurs bloquantes au main orchestrator
     for res in results {
         if let Err(e) = res { return Err(pyo3::exceptions::PyIOError::new_err(e)); }
     }
@@ -138,7 +132,22 @@ pub fn writting_csv_processing(
                 for col in &ordered_columns {
                     let mut cell_val = String::new();
                     if col == "PEAKS_LIST" {
-                        if !spec.peaks.is_empty() {
+                        // --- NOUVEAU : Récupération des annotations De Novo ---
+                        let mut used_metadata = false;
+                        if let Some(val) = spec.metadata.get("PEAKS_LIST") {
+                            if !val.trim().is_empty() && val != "NOT FOUND" {
+                                let sep = if val.contains(';') { ';' } else { '\n' };
+                                let lines_count = val.split(sep).filter(|s| !s.trim().is_empty()).count();
+
+                                if lines_count == spec.peaks.len() && val.chars().any(|c| c.is_ascii_alphabetic()) {
+                                    cell_val = val.replace("\n", ";"); // Force le format CSV
+                                    used_metadata = true;
+                                }
+                            }
+                        }
+
+                        // Fallback rapide
+                        if !used_metadata && !spec.peaks.is_empty() {
                             let mut peaks_str = String::with_capacity(spec.peaks.len() * 20);
                             for (i, &(mz, int)) in spec.peaks.iter().enumerate() {
                                 if i > 0 { peaks_str.push(';'); }
@@ -220,7 +229,6 @@ pub fn writting_json_processing(
 
             let is_append_mode = update && file_path.exists() && fs::metadata(&file_path).map(|m| m.len()).unwrap_or(0) > 2;
 
-            // Gestion du mode Append ou Création
             let file_res = if is_append_mode {
                 OpenOptions::new().read(true).write(true).open(&file_path).and_then(|mut f| {
                     let file_len = f.metadata()?.len();
@@ -276,13 +284,42 @@ pub fn writting_json_processing(
                 map.insert("NUM PEAKS".to_string(), serde_json::json!(num_peaks_str.parse::<i64>().unwrap_or(0)));
 
                 let mut peaks_array = Vec::new();
-                for &(mz, intensity) in &spec.peaks {
-                    peaks_array.push(serde_json::json!([mz, intensity]));
+
+                // --- NOUVEAU : Récupération intelligente et parsing pour le format JSON ---
+                if let Some(val) = spec.metadata.get("PEAKS_LIST") {
+                    if !val.trim().is_empty() && val != "NOT FOUND" {
+                        let sep = if val.contains(';') { ';' } else { '\n' };
+                        let lines_count = val.split(sep).filter(|s| !s.trim().is_empty()).count();
+
+                        if lines_count == spec.peaks.len() && val.chars().any(|c| c.is_ascii_alphabetic()) {
+                            for line in val.split(sep).filter(|s| !s.trim().is_empty()) {
+                                let parts: Vec<&str> = line.trim().split_whitespace().collect();
+                                if parts.len() >= 3 {
+                                    let mz: f64 = parts[0].parse().unwrap_or(0.0);
+                                    let int: f64 = parts[1].parse().unwrap_or(0.0);
+                                    let formula = parts[2..].join(" ");
+                                    peaks_array.push(serde_json::json!([mz, int, formula]));
+                                } else if parts.len() == 2 {
+                                    let mz: f64 = parts[0].parse().unwrap_or(0.0);
+                                    let int: f64 = parts[1].parse().unwrap_or(0.0);
+                                    peaks_array.push(serde_json::json!([mz, int]));
+                                }
+                            }
+                        }
+                    }
                 }
+
+                // Si aucune donnée de métadonnée valide, on utilise le tableau brute classique
+                if peaks_array.is_empty() {
+                    for &(mz, intensity) in &spec.peaks {
+                        peaks_array.push(serde_json::json!([mz, intensity]));
+                    }
+                }
+
                 map.insert("PEAKS_LIST".to_string(), serde_json::Value::Array(peaks_array));
 
-                // Processus Regex coûteux parallélisé
                 let item_str_pretty = serde_json::to_string_pretty(&map).unwrap();
+                // RE_3 compressera parfaitement tes JSON à 3 arguments !
                 let compacted_1 = RE_3.replace_all(&item_str_pretty, "[$1, $2, \"$3\"]").to_string();
                 let compacted_2 = RE_2.replace_all(&compacted_1, "[$1, $2]").to_string();
                 let indented_str = format!("  {}", compacted_2.replace('\n', "\n  "));
