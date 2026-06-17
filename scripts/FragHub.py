@@ -10,13 +10,9 @@ from pydantic import BaseModel, Field
 
 import sys
 import os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from scripts.MAIN import MAIN
-parameters_dict = {}
 import fraghub_rust
 
-import sys
-import os
+parameters_dict = {}
 
 if getattr(sys, 'frozen', False):
     BASE_DIR = sys._MEIPASS
@@ -156,19 +152,25 @@ async def init_data():
 # --- EXÉCUTION ---
 def execute_main_safely():
     try:
-        MAIN(
-            parameters_dict=parameters_dict,
-            progress_callback=progress_callback,
-            total_items_callback=total_items_callback,
-            prefix_callback=prefix_callback,
-            item_type_callback=item_type_callback,
-            step_callback=step_callback,
-            completion_callback=completion_callback,
-            deletion_callback=deletion_callback,
-            stop_flag=get_stop_flag
+        # Appel direct de la fonction Rust (remplace l'ancien MAIN.py)
+        fraghub_rust.main_orchestrator(
+            parameters_dict,
+            progress_callback,
+            total_items_callback,
+            prefix_callback,
+            item_type_callback,
+            step_callback,
+            completion_callback,
+            deletion_callback,
+            get_stop_flag
         )
-    except Exception:
-        traceback.print_exc()
+    except Exception as e:
+        # Gestion de l'interruption utilisateur spécifiée dans Rust
+        if str(e) == "Process stopped by user.":
+            if deletion_callback:
+                deletion_callback("\n-- PROCESS INTERRUPTED BY USER --")
+        else:
+            traceback.print_exc()
 
 @app.post("/run-analysis")
 async def run_analysis(params: FragHubParams, background_tasks: BackgroundTasks):
