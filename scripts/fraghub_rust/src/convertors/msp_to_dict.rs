@@ -1,12 +1,9 @@
 // src/convertors/msp_to_dict.rs
 use pyo3::prelude::*;
-use pyo3::types::{PyList, PyAny};
 use crate::spectrum::Spectrum;
 use rayon::prelude::*;
 use std::collections::HashMap;
 
-// Importation du tunnel
-use super::loaders::RawMspSpectra;
 
 struct ParsedSpectrum {
     metadata: HashMap<String, String>,
@@ -15,7 +12,7 @@ struct ParsedSpectrum {
 
 pub fn msp_to_dict_processing(
     py: Python,
-    final_msp_obj: &pyo3::Bound<'_, pyo3::types::PyAny>, // Accepte le tunnel ou une liste classique
+    rust_strings: Vec<String>,
     keys_dict: HashMap<String, String>,
     keys_list: Vec<String>,
     progress_callback: Option<PyObject>,
@@ -24,16 +21,7 @@ pub fn msp_to_dict_processing(
     item_type_callback: Option<PyObject>,
 ) -> PyResult<Vec<Spectrum>> {
 
-    let mut rust_strings: Vec<String> = Vec::new();
 
-    // EXTRACTION ÉCLAIR DEPUIS LE TUNNEL (0 seconde)
-    if let Ok(mut raw) = final_msp_obj.extract::<PyRefMut<'_, RawMspSpectra>>() {
-        rust_strings = std::mem::take(&mut raw.data);
-    } else if let Ok(py_list) = final_msp_obj.downcast::<PyList>() {
-        for item in py_list {
-            if let Ok(s) = item.extract::<String>() { rust_strings.push(s); }
-        }
-    }
 
     let total = rust_strings.len();
     if let Some(cb) = &total_items_callback { let _ = cb.call1(py, (total, 0)); }

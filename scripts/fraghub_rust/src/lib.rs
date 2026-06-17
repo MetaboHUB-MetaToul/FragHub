@@ -38,7 +38,6 @@ fn fraghub_rust(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(set_projects::reset_updates, m)?)?;
     m.add_function(wrap_pyfunction!(set_projects::init_project, m)?)?;
 
-    m.add_class::<deletion_report::DeletionReport>()?;
 
     Ok(())
 }

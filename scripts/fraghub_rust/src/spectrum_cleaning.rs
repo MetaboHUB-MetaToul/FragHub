@@ -1,6 +1,5 @@
 // src/spectrum_cleaning.rs
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyAny};
 use crate::spectrum::Spectrum;
 use rayon::prelude::*;
 use std::collections::HashMap;
@@ -13,8 +12,8 @@ pub fn spectrum_cleaning_processing(
     spectrum_list: Vec<Spectrum>,
     output_directory: String,
     ordered_columns: Vec<String>,
-    deletion_report_obj: pyo3::Bound<'_, pyo3::types::PyAny>,
-    parameters_dict_py: pyo3::Bound<'_, pyo3::types::PyDict>,
+    deletion_report: &mut crate::deletion_report::DeletionReport,
+    parameters_dict: &std::collections::HashMap<String, f64>,
     progress_callback: Option<PyObject>,
     total_items_callback: Option<PyObject>,
     prefix_callback: Option<PyObject>,
@@ -27,17 +26,6 @@ pub fn spectrum_cleaning_processing(
     if let Some(cb) = &total_items_callback { cb.call1(py, (total_items,))?; }
     if let Some(cb) = &prefix_callback { cb.call1(py, ("cleaning spectrums:",))?; }
     if let Some(cb) = &item_type_callback { cb.call1(py, ("spectra",))?; }
-
-    let mut parameters_dict: HashMap<String, f64> = HashMap::new();
-    if let Ok(dict) = parameters_dict_py.downcast::<PyDict>() {
-        for (k, v) in dict.iter() {
-            if let Ok(key_str) = k.extract::<String>() {
-                if let Ok(val_float) = v.extract::<f64>() {
-                    parameters_dict.insert(key_str, val_float);
-                }
-            }
-        }
-    }
 
     let context = {
         let state = crate::global_state::STATE.read().unwrap();
@@ -61,7 +49,7 @@ pub fn spectrum_cleaning_processing(
     for chunk in spectrum_list.chunks(chunk_size) {
         let results: Vec<_> = py.allow_threads(|| {
             chunk.par_iter().map(|spec| {
-                let mut meta = spec.metadata.clone();
+                let meta = spec.metadata.clone();
 
                 if spec.peaks.is_empty() {
                     return Err((meta, "spectrum deleted because peaks list is empty".to_string()));
@@ -148,26 +136,24 @@ pub fn spectrum_cleaning_processing(
         if let Some(cb) = &progress_callback { cb.call1(py, (processed,))?; }
     }
 
-    // 3. Mise à jour de L'OBJET RUST DeletionReport EN DIRECT !
+    // 3. Mise à jour de L'OBJET RUST DeletionReport EN DIRECT (Nativement !)
     for (reason, group) in &deleted_spectra {
-        let count = group.len() as usize;
-        let py_var = match reason.as_str() {
-            "spectrum deleted because peaks list is empty" => "no_peaks_list",
-            "spectrum deleted because precursor mz is less than or equal to zero." => "no_precursor_mz",
-            "spectrum deleted because precursor mz field is empty or contains invalid characters (not a floating number)." => "no_precursor_mz",
-            "spectrum deleted because it's entropy score is lower than the threshold selected by the user." => "low_entropy_score",
-            "spectrum deleted because it has neither inchi nor smiles nor inchikey" => "no_smiles_no_inchi_no_inchikey",
-            "spectrum deleted because its adduct field is empty or the value entered is not an adduct" => "no_or_bad_adduct",
-            "spectrum deleted because the adduct corresponds to the wrong ionization mode (neg adduct in pos ionmode)." => "no_or_bad_adduct",
-            "spectrum deleted because the adduct corresponds to the wrong ionization mode (pos adduct in neg ionmode)." => "no_or_bad_adduct",
-            "spectrum deleted because its number of peaks is below the threshold chosen by the user" => "minimum_peaks_not_requiered",
-            "spectrum deleted because peaks list is empty after removing peaks above precursor m/z" => "all_peaks_above_precursor_mz",
-            "spectrum deleted because peaks list is empty after removing peaks out of mz range choiced by the user" => "no_peaks_in_mz_range",
-            "spectrum deleted because peaks list does not contain minimum number of high peaks required according to the value choiced by the user" => "minimum_high_peaks_not_requiered",
+        let count = group.len();
+        match reason.as_str() {
+            "spectrum deleted because peaks list is empty" => deletion_report.no_peaks_list += count,
+            "spectrum deleted because precursor mz is less than or equal to zero." => deletion_report.no_precursor_mz += count,
+            "spectrum deleted because precursor mz field is empty or contains invalid characters (not a floating number)." => deletion_report.no_precursor_mz += count,
+            "spectrum deleted because it's entropy score is lower than the threshold selected by the user." => deletion_report.low_entropy_score += count,
+            "spectrum deleted because it has neither inchi nor smiles nor inchikey" => deletion_report.no_smiles_no_inchi_no_inchikey += count,
+            "spectrum deleted because its adduct field is empty or the value entered is not an adduct" => deletion_report.no_or_bad_adduct += count,
+            "spectrum deleted because the adduct corresponds to the wrong ionization mode (neg adduct in pos ionmode)." => deletion_report.no_or_bad_adduct += count,
+            "spectrum deleted because the adduct corresponds to the wrong ionization mode (pos adduct in neg ionmode)." => deletion_report.no_or_bad_adduct += count,
+            "spectrum deleted because its number of peaks is below the threshold chosen by the user" => deletion_report.minimum_peaks_not_requiered += count,
+            "spectrum deleted because peaks list is empty after removing peaks above precursor m/z" => deletion_report.all_peaks_above_precursor_mz += count,
+            "spectrum deleted because peaks list is empty after removing peaks out of mz range choiced by the user" => deletion_report.no_peaks_in_mz_range += count,
+            "spectrum deleted because peaks list does not contain minimum number of high peaks required according to the value choiced by the user" => deletion_report.minimum_high_peaks_not_requiered += count,
             _ => continue,
-        };
-        let current: usize = deletion_report_obj.getattr(py_var)?.extract()?;
-        deletion_report_obj.setattr(py_var, current + count)?;
+        }
     }
 
     // 4. Écriture des CSV de suppression

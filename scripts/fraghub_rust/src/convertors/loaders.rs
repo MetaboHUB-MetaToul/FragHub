@@ -8,35 +8,9 @@ use sha2::{Sha256, Digest};
 use regex::Regex;
 use std::time::{Duration, Instant};
 
-// =========================================================
-// LE TUNNEL RUST (JSON) : Protège la RAM contre la copie Python
-// =========================================================
-#[pyclass]
-pub struct RawJsonSpectra {
-    pub data: Vec<String>,
-}
-
-#[pymethods]
-impl RawJsonSpectra {
-    fn __len__(&self) -> usize { self.data.len() }
-    fn __bool__(&self) -> bool { !self.data.is_empty() }
-}
-
-// =========================================================
-// LE TUNNEL RUST (MSP) : Protège la RAM contre la copie Python
-// =========================================================
-#[pyclass]
-pub struct RawMspSpectra {
-    pub data: Vec<String>,
-}
-
-#[pymethods]
-impl RawMspSpectra {
-    fn __len__(&self) -> usize { self.data.len() }
-    fn __bool__(&self) -> bool { !self.data.is_empty() }
-}
 
 /// Gets the size of a file in bytes, converts it to a string, and returns the SHA-256 hash.
+#[pyfunction]
 pub fn generate_file_hash(file_path: &str) -> String {
     if let Ok(metadata) = std::fs::metadata(file_path) {
         let size = metadata.len().to_string();
@@ -58,7 +32,7 @@ pub fn load_spectrum_list_json(
     total_items_callback: Option<PyObject>,
     prefix_callback: Option<PyObject>,
     item_type_callback: Option<PyObject>,
-) -> PyResult<RawJsonSpectra> {
+) -> PyResult<Vec<String>> {
     let file_hash = generate_file_hash(json_file_path);
     let path = Path::new(json_file_path);
     let filename = path.file_name().unwrap_or_default().to_string_lossy().to_string();
@@ -136,7 +110,7 @@ pub fn load_spectrum_list_json(
     
     if let Some(cb) = &progress_callback { let _ = cb.call1(py, (total_mb,)); }
 
-    Ok(RawJsonSpectra { data: spectrum_list })
+    Ok(spectrum_list)
 }
 
 // ----------------------------------------------------------------------
@@ -149,7 +123,7 @@ pub fn load_spectrum_list_json_2(
     total_items_callback: Option<PyObject>,
     prefix_callback: Option<PyObject>,
     item_type_callback: Option<PyObject>,
-) -> PyResult<RawJsonSpectra> {
+) -> PyResult<Vec<String>> {
     let file_hash = generate_file_hash(json_file_path);
     let path = Path::new(json_file_path);
     let filename = path.file_name().unwrap_or_default().to_string_lossy().to_string();
@@ -197,7 +171,7 @@ pub fn load_spectrum_list_json_2(
     
     if let Some(cb) = &progress_callback { let _ = cb.call1(py, (total_mb,)); }
     
-    Ok(RawJsonSpectra { data: spectrum_list })
+    Ok(spectrum_list)
 }
 
 // ----------------------------------------------------------------------
@@ -210,7 +184,7 @@ pub fn load_spectrum_list_from_msp(
     total_items_callback: Option<PyObject>,
     prefix_callback: Option<PyObject>,
     item_type_callback: Option<PyObject>,
-) -> PyResult<RawMspSpectra> { 
+) -> PyResult<Vec<String>> { 
     let file_hash = generate_file_hash(msp_file_path);
     let path = Path::new(msp_file_path);
     let filename = path.file_name().unwrap_or_default().to_string_lossy().to_string();
@@ -268,7 +242,7 @@ pub fn load_spectrum_list_from_msp(
 
     if let Some(cb) = &progress_callback { let _ = cb.call1(py, (total_mb,)); }
 
-    Ok(RawMspSpectra { data: spectrum_list })
+    Ok(spectrum_list)
 }
 
 // ----------------------------------------------------------------------

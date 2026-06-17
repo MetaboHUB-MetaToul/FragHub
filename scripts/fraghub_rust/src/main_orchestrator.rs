@@ -1,6 +1,5 @@
 // src/main_orchestrator.rs
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList};
 use pyo3::exceptions::PyException;
 use std::time::SystemTime;
 use chrono::Local;
@@ -63,13 +62,13 @@ pub fn main_orchestrator(
     }
     init_project(output_directory.clone())?;
 
-    let deletion_report = Py::new(py, DeletionReport::default())?;
+    let mut deletion_report = DeletionReport::default();
 
     check_stop_flag()?;
 
     // STEP 1: PARSING
     let tuple_res = parsing_to_dict_processing(
-        py, input_paths,
+        py, input_paths.clone(),
         progress_callback.clone(), total_items_callback.clone(),
         prefix_callback.clone(), item_type_callback.clone(), step_callback.clone()
     )?;
@@ -128,8 +127,8 @@ pub fn main_orchestrator(
     let mut spectrum_list = tuple_dup.0;
     let deleted_count_dup = tuple_dup.1;
     {
-        let mut report = deletion_report.borrow_mut(py);
-        report.duplicatas_removed = deleted_count_dup;
+        
+        deletion_report.duplicatas_removed = deleted_count_dup;
     }
     if let Some(cb) = &deletion_callback { cb.call1(py, (format!("duplicatas removed: {}", deleted_count_dup),))?; }
     check_stop_flag()?;
@@ -148,8 +147,8 @@ pub fn main_orchestrator(
     let update_temp: bool = tuple_up.1;
     let deleted_count_up = tuple_up.2;
     {
-        let mut report = deletion_report.borrow_mut(py);
-        report.previously_cleaned = deleted_count_up;
+        
+        deletion_report.previously_cleaned = deleted_count_up;
     }
     if let Some(cb) = &deletion_callback { cb.call1(py, (format!("previously cleaned: {}", deleted_count_up),))?; }
     check_stop_flag()?;
@@ -163,15 +162,24 @@ pub fn main_orchestrator(
         if let Some(cb) = &step_callback { cb.call1(py, ("-- CLEANING SPECTRUMS --",))?; }
         py.allow_threads(|| { std::thread::sleep(std::time::Duration::from_millis(10)); });
 
-        let deletion_report_bound = deletion_report.into_bound(py);
+        // Convert parameters to native map
+        let mut params_f64 = std::collections::HashMap::new();
+        for (k, v) in parameters_dict.iter() {
+            if let Ok(key_str) = k.extract::<String>() {
+                if let Ok(val_float) = v.extract::<f64>() {
+                    params_f64.insert(key_str, val_float);
+                }
+            }
+        }
+
         spectrum_list = spectrum_cleaning_processing(
-            py, spectrum_list.clone(), output_directory.clone(), ordered_columns.clone(), deletion_report_bound.clone().into_any(), parameters_dict.clone(),
+            py, spectrum_list.clone(), output_directory.clone(), ordered_columns.clone(), &mut deletion_report, &params_f64,
             progress_callback.clone(), total_items_callback.clone(), prefix_callback.clone(), item_type_callback.clone()
         )?;
 
         // ---> AJOUT DU BLOC DELETION CALLBACK (COMME EN PYTHON) <---
         if let Some(cb) = &deletion_callback {
-            let report = deletion_report_bound.borrow();
+            let report = &deletion_report;
             let msg = format!(
                 "\n                No peaks list: {}\n                No smiles, no inchi, no inchikey: {}\n                No precursor mz: {}\n                No or bad adduct: {}\n                Low entropy score: {}\n                Minimum peaks not required: {}\n                All peaks above precursor mz: {}\n                No peaks in mz range: {}\n                Minimum high peaks not required: {}\n                ",
                 report.no_peaks_list,
@@ -199,13 +207,13 @@ pub fn main_orchestrator(
         py.allow_threads(|| { std::thread::sleep(std::time::Duration::from_millis(10)); });
 
         spectrum_list = process_mols(
-            py, spectrum_list, &output_directory, &deletion_report_bound.clone().into_any(),
+            py, spectrum_list, &output_directory, &mut deletion_report,
             progress_callback.clone(), total_items_callback.clone(), prefix_callback.clone(), item_type_callback.clone()
         )?;
 
         // ---> AJOUT DE LA MISE À JOUR MOLS (COMME EN PYTHON) <---
         if let Some(cb) = &deletion_callback {
-            let report = deletion_report_bound.borrow();
+            let report = &deletion_report;
             cb.call1(py, (format!("No smiles, no inchi, no inchikey (updated): {}", report.no_smiles_no_inchi_no_inchikey),))?;
         }
 
@@ -239,7 +247,7 @@ pub fn main_orchestrator(
             py.allow_threads(|| { std::thread::sleep(std::time::Duration::from_millis(10)); });
 
             spectrum_list = de_novo_calculation_processing(
-                py, spectrum_list, parameters_dict.clone(), progress_callback.clone(), total_items_callback.clone(), prefix_callback.clone(), item_type_callback.clone()
+                py, spectrum_list, &params_f64, progress_callback.clone(), total_items_callback.clone(), prefix_callback.clone(), item_type_callback.clone()
             )?;
             check_stop_flag()?;
         }
@@ -326,7 +334,7 @@ pub fn main_orchestrator(
         }
 
         if let Some(cb) = &deletion_callback {
-            let report = deletion_report_bound.borrow();
+            let report = &deletion_report;
             // ---> CORRECTION : J'ai ajouté no_or_bad_adduct dans le total des suppressions <---
             let total_deletions = report.duplicatas_removed + report.previously_cleaned + report.no_peaks_list + report.no_smiles_no_inchi_no_inchikey + report.no_precursor_mz + report.no_or_bad_adduct + report.low_entropy_score + report.minimum_peaks_not_requiered + report.all_peaks_above_precursor_mz + report.no_peaks_in_mz_range + report.minimum_high_peaks_not_requiered;
             cb.call1(py, (format!("Total deletions: {}", total_deletions),))?;
@@ -334,9 +342,7 @@ pub fn main_orchestrator(
 
         // STEP 12: REPORT
         let current_datetime = Local::now().format("%d_%m_%Y__%H_%M_%S").to_string();
-        let deletion_dict = deletion_report_bound.call_method0("to_dict")?.downcast_into::<PyDict>()?;
-
-        generate_report_processing(py, output_directory, current_datetime, &parameters_dict.clone(), &deletion_dict.clone(), &pos_lc_df, &pos_lc_in_silico_df, &pos_gc_df, &pos_gc_in_silico_df, &neg_lc_df, &neg_lc_in_silico_df, &neg_gc_df, &neg_gc_in_silico_df)?;
+        generate_report_processing(py, output_directory, current_datetime, &params_f64, &input_paths, &deletion_report, &pos_lc_df, &pos_lc_in_silico_df, &pos_gc_df, &pos_gc_in_silico_df, &neg_lc_df, &neg_lc_in_silico_df, &neg_gc_df, &neg_gc_in_silico_df)?;
 
     }
 

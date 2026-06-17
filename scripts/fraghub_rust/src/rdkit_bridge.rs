@@ -1,5 +1,4 @@
 use pyo3::prelude::*;
-use pyo3::types::{PyList, PyAny};
 use crate::spectrum::Spectrum;
 use std::collections::HashMap;
 use crate::globals_vars::{INDIGO_SMILES_CORRECTION_PATTERN, INCHIKEY_PATTERN};
@@ -8,9 +7,9 @@ use std::path::Path;
 
 pub fn process_mols(
     py: Python,
-    mut spectrum_list: Vec<Spectrum>,
+    spectrum_list: Vec<Spectrum>,
     output_directory: &str,
-    deletion_report: &pyo3::Bound<'_, pyo3::types::PyAny>,
+    deletion_report: &mut crate::deletion_report::DeletionReport,
     progress_callback: Option<PyObject>,
     total_items_callback: Option<PyObject>,
     prefix_callback: Option<PyObject>,
@@ -122,11 +121,7 @@ pub fn process_mols(
 
     if let Some(cb) = &progress_callback { cb.call1(py, (total,))?; }
 
-    // Mise à jour du rapport de suppression
-    if let Ok(current) = deletion_report.getattr("no_smiles_no_inchi_no_inchikey") {
-        let current_val: i64 = current.extract().unwrap_or(0);
-        deletion_report.setattr("no_smiles_no_inchi_no_inchikey", current_val + deleted_count)?;
-    }
+    deletion_report.no_smiles_no_inchi_no_inchikey += deleted_count;
 
     // Écriture des suppressions si besoin
     if !deleted_rows.is_empty() {

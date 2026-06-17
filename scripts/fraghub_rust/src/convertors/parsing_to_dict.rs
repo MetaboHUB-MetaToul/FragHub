@@ -1,6 +1,5 @@
 // src/convertors/parsing_to_dict.rs
 use pyo3::prelude::*;
-use std::collections::HashMap;
 
 use crate::convertors::loaders::{load_spectrum_list_json, load_spectrum_list_json_2, load_spectrum_list_from_msp, load_spectrum_list_from_mgf};
 use crate::convertors::json_to_dict::json_to_dict_processing;
@@ -49,13 +48,12 @@ pub fn parsing_to_dict_processing(
         if let Some(cb) = &step_callback { let _ = cb.call1(py, ("-- PARSING JSON TO DICT --",)); }
 
         for file in json_files {
-            let raw_tunnel = match load_spectrum_list_json(py, &file, progress_callback.clone(), total_items_callback.clone(), prefix_callback.clone(), item_type_callback.clone()) {
+            let rust_strings = match load_spectrum_list_json(py, &file, progress_callback.clone(), total_items_callback.clone(), prefix_callback.clone(), item_type_callback.clone()) {
                 Ok(t) => t,
                 Err(_) => load_spectrum_list_json_2(py, &file, progress_callback.clone(), total_items_callback.clone(), prefix_callback.clone(), item_type_callback.clone())?,
             };
 
-            let raw_obj = raw_tunnel.into_py(py).into_bound(py);
-            let dict_list = json_to_dict_processing(py, &raw_obj, keys_dict.clone(), keys_list.clone(), progress_callback.clone(), total_items_callback.clone(), prefix_callback.clone(), item_type_callback.clone())?;
+            let dict_list = json_to_dict_processing(py, rust_strings, keys_dict.clone(), keys_list.clone(), progress_callback.clone(), total_items_callback.clone(), prefix_callback.clone(), item_type_callback.clone())?;
 
             final_json.extend(dict_list);
         }
@@ -69,9 +67,8 @@ pub fn parsing_to_dict_processing(
         if let Some(cb) = &step_callback { let _ = cb.call1(py, ("-- PARSING MSP TO DICT --",)); }
 
         for file in msp_files {
-            let raw_tunnel = load_spectrum_list_from_msp(py, &file, progress_callback.clone(), total_items_callback.clone(), prefix_callback.clone(), item_type_callback.clone())?;
-            let raw_obj = raw_tunnel.into_py(py).into_bound(py);
-            let dict_list = msp_to_dict_processing(py, &raw_obj, keys_dict.clone(), keys_list.clone(), progress_callback.clone(), total_items_callback.clone(), prefix_callback.clone(), item_type_callback.clone())?;
+            let rust_strings = load_spectrum_list_from_msp(py, &file, progress_callback.clone(), total_items_callback.clone(), prefix_callback.clone(), item_type_callback.clone())?;
+            let dict_list = msp_to_dict_processing(py, rust_strings, keys_dict.clone(), keys_list.clone(), progress_callback.clone(), total_items_callback.clone(), prefix_callback.clone(), item_type_callback.clone())?;
 
             final_msp.extend(dict_list);
         }

@@ -2,7 +2,7 @@ use pyo3::prelude::*;
 use crate::spectrum::Spectrum;
 
 pub fn normalize_to_not_found_processing(
-    py: Python,
+    _py: Python,
     mut spectrum_list: Vec<Spectrum>,
 ) -> PyResult<Vec<Spectrum>> {
     for spec in spectrum_list.iter_mut() {

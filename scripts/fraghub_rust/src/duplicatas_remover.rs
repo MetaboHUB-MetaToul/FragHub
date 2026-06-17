@@ -8,7 +8,7 @@ use csv::WriterBuilder;
 
 pub fn remove_duplicatas_processing(
     py: Python,
-    mut spectrum_list: Vec<Spectrum>,
+    spectrum_list: Vec<Spectrum>,
     output_directory: String,
     ordered_columns: Vec<String>,
     progress_callback: Option<PyObject>,

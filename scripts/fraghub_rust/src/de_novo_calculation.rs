@@ -1,6 +1,5 @@
 // src/de_novo_calculation.rs
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyAny};
 use crate::spectrum::Spectrum;
 use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
@@ -280,7 +279,7 @@ fn process_spectrum_peaks(formula: &str, peaks_list_str: &str, ppm_tol: f64) -> 
 pub fn de_novo_calculation_processing(
     py: Python,
     mut spectrum_list: Vec<Spectrum>,
-    parameters_dict_py: pyo3::Bound<'_, pyo3::types::PyDict>,
+    parameters_dict: &HashMap<String, f64>,
     progress_callback: Option<PyObject>,
     total_items_callback: Option<PyObject>,
     prefix_callback: Option<PyObject>,
@@ -294,12 +293,7 @@ pub fn de_novo_calculation_processing(
 
     if let Some(cb) = &total_items_callback { cb.call1(py, (total_items, 0))?; }
     
-    let params = parameters_dict_py;
-    let ppm_tol = if let Ok(Some(val)) = params.get_item("de_novo_ppm_tolerance") {
-        val.extract::<f64>().unwrap_or(5.0)
-    } else {
-        5.0
-    };
+    let ppm_tol = parameters_dict.get("de_novo_ppm_tolerance").cloned().unwrap_or(5.0);
 
     let chunk_size = 500;
     let mut processed = 0;

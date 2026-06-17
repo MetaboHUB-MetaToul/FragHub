@@ -1,7 +1,6 @@
 // src/convertors/mgf_to_dict.rs
 
 use pyo3::prelude::*;
-use pyo3::types::{PyList};
 use crate::spectrum::Spectrum;
 use rayon::prelude::*;
 use std::collections::HashMap;

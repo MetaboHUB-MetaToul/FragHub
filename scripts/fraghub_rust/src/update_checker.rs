@@ -8,7 +8,7 @@ use csv::WriterBuilder;
 
 pub fn check_for_update_processing(
     py: Python,
-    mut spectrum_list: Vec<Spectrum>,
+    spectrum_list: Vec<Spectrum>,
     output_directory: String,
     ordered_columns: Vec<String>,
     progress_callback: Option<PyObject>,
