@@ -1,6 +1,13 @@
 # Change Log
 All notable changes to this project will be documented in this file.
 
+- **19_06_2026** (Version 2.0.0 Major Update):
+  - **Rust Core Engine**: Completely rewrote the data processing pipeline (parsers, molecule derivation, filters, writers) in Rust via PyO3, replacing the pure Python implementation for massively increased high-throughput processing speed.
+  - **Headless CLI Mode**: Introduced a new `--cli` mode to run FragHub without the graphical interface, ideal for servers and automated data pipelines. Features advanced real-time metrics (ETA, speed) and a `--quiet` flag.
+  - **Recursive Directory Parsing**: Added input resolution in CLI mode to automatically scan entire folder structures and batch-process valid MS files.
+  - **Backend Modernization**: Updated the FastAPI Python backend to use modern `lifespan` handlers, resolving deprecation warnings, and upgraded Pydantic schemas to v2 standards (`ConfigDict`).
+  - **Agnostic Callback System**: Built a robust event bridge allowing the Rust engine to safely stream asynchronous progress logs to both the CLI terminal and the Electron/Nuxt GUI via WebSockets.
+
 - **31_05_2026**:
   - modernizing GUI and desktop integration with Nuxt 4 + electron.js 
 

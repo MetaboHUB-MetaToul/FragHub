@@ -72,7 +72,7 @@ To use this programme:
 
 ## HEADLESS CLI MODE
 
-FragHub 2.0 introduces a headless Command Line Interface (CLI). This feature enables seamless integration into automated data pipelines, server environments, and high-performance computing (HPC) clusters, utilizing the Rust core engine without requiring a graphical user interface.
+FragHub 2.0 introduces a headless Command Line Interface (CLI). This feature enables seamless integration into automated data pipelines and server environments, utilizing the Rust core engine without requiring a graphical user interface.
 
 Please refer to the [CLI Documentation](Documentation_CLI.md) for comprehensive usage instructions, available arguments, and pipeline integration examples.
 
