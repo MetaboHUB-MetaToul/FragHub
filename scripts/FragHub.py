@@ -200,27 +200,29 @@ if __name__ == "__main__":
         parser.add_argument("--input_directory", nargs='+', required=True, help="List of input files/directories")
         parser.add_argument("--output_directory", type=str, required=True, help="Output directory path")
         
-        # Filtres et options (avec valeurs par défaut identiques à l'UI Vue.js)
-        parser.add_argument("--normalize_intensity", type=float, default=1.0)
-        parser.add_argument("--remove_peak_above_precursormz", type=float, default=1.0)
-        parser.add_argument("--check_minimum_peak_requiered", type=float, default=1.0)
+        # Filtres on/off (yes/no)
+        parser.add_argument("--normalize_intensity", type=str, choices=['yes', 'no'], default='yes')
+        parser.add_argument("--remove_peak_above_precursormz", type=str, choices=['yes', 'no'], default='yes')
+        parser.add_argument("--check_minimum_peak_requiered", type=str, choices=['yes', 'no'], default='yes')
+        parser.add_argument("--reduce_peak_list", type=str, choices=['yes', 'no'], default='yes')
+        parser.add_argument("--remove_spectrum_under_entropy_score", type=str, choices=['yes', 'no'], default='yes')
+        parser.add_argument("--keep_mz_in_range", type=str, choices=['yes', 'no'], default='yes')
+        parser.add_argument("--check_minimum_of_high_peaks_requiered", type=str, choices=['yes', 'no'], default='yes')
+        parser.add_argument("--calculate_de_novo", type=str, choices=['yes', 'no'], default='no')
+        parser.add_argument("--csv", type=str, choices=['yes', 'no'], default='yes')
+        parser.add_argument("--msp", type=str, choices=['yes', 'no'], default='yes')
+        parser.add_argument("--json", type=str, choices=['yes', 'no'], default='yes')
+        parser.add_argument("--reset_updates", type=str, choices=['yes', 'no'], default='no')
+        
+        # Valeurs numériques (seuils, tolérances)
         parser.add_argument("--check_minimum_peak_requiered_n_peaks", type=float, default=3.0)
-        parser.add_argument("--reduce_peak_list", type=float, default=1.0)
         parser.add_argument("--reduce_peak_list_max_peaks", type=float, default=500.0)
-        parser.add_argument("--remove_spectrum_under_entropy_score", type=float, default=1.0)
         parser.add_argument("--remove_spectrum_under_entropy_score_value", type=float, default=0.5)
-        parser.add_argument("--keep_mz_in_range", type=float, default=1.0)
         parser.add_argument("--keep_mz_in_range_from_mz", type=float, default=50.0)
         parser.add_argument("--keep_mz_in_range_to_mz", type=float, default=2000.0)
-        parser.add_argument("--check_minimum_of_high_peaks_requiered", type=float, default=1.0)
         parser.add_argument("--check_minimum_of_high_peaks_requiered_intensity_percent", type=float, default=5.0)
         parser.add_argument("--check_minimum_of_high_peaks_requiered_no_peaks", type=float, default=2.0)
-        parser.add_argument("--calculate_de_novo", type=float, default=0.0)
         parser.add_argument("--de_novo_ppm_tolerance", type=float, default=10.0)
-        parser.add_argument("--csv", type=float, default=1.0)
-        parser.add_argument("--msp", type=float, default=1.0)
-        parser.add_argument("--json", type=float, default=1.0)
-        parser.add_argument("--reset_updates", type=float, default=0.0)
         
         args = parser.parse_args()
         
@@ -242,8 +244,18 @@ if __name__ == "__main__":
             print("\n[ERROR] Aucun fichier MS valide (.msp, .mgf, .csv, .json) trouvé dans les chemins spécifiés.")
             sys.exit(1)
             
-        # Hydratation du parameters_dict avec les fichiers résolus
+        # Hydratation du parameters_dict avec les fichiers résolus et conversion yes/no
         args_dict = vars(args)
+        
+        # Conversion transparente yes/no en 1.0/0.0 pour Rust
+        yes_no_keys = [
+            'normalize_intensity', 'remove_peak_above_precursormz', 'check_minimum_peak_requiered',
+            'reduce_peak_list', 'remove_spectrum_under_entropy_score', 'keep_mz_in_range',
+            'check_minimum_of_high_peaks_requiered', 'calculate_de_novo', 'csv', 'msp', 'json', 'reset_updates'
+        ]
+        for key in yes_no_keys:
+            args_dict[key] = 1.0 if args_dict[key] == 'yes' else 0.0
+            
         args_dict['input_directory'] = resolved_files
         parameters_dict.update(args_dict)
         

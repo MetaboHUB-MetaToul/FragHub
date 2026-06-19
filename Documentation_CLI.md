@@ -40,21 +40,21 @@ These arguments must be provided for FragHub to run.
 
 ---
 
-## 📁 Intelligent Input Resolution
+## 📁 Input Resolution
 
-The `--input_directory` argument is highly flexible and features recursive folder scanning:
-- **Files**: You can specify individual files (`--input_directory file1.msp file2.mgf`).
-- **Directories**: You can provide a root directory (`--input_directory /my/data/folder`). FragHub will automatically and recursively scan all subdirectories to find any valid MS files (`.msp`, `.mgf`, `.csv`, `.json`).
-- **Mixed**: You can provide a mix of files and directories simultaneously.
+The `--input_directory` argument supports recursive directory parsing and accepts multiple inputs:
+- **Files**: Absolute or relative paths to individual files (`--input_directory file1.msp file2.mgf`).
+- **Directories**: Absolute or relative paths to directories (`--input_directory /my/data/folder`). FragHub will recursively scan all subdirectories to find valid MS files (`.msp`, `.mgf`, `.csv`, `.json`).
+- **Mixed**: Files and directories can be provided simultaneously.
 
 ---
 
-## ⏱️ Advanced Progress Monitoring
+## ⏱️ Execution Metrics
 
-When running normally (without `--quiet`), the CLI provides a modern, animated progress bar giving you real-time metrics:
-- **Elapsed Time**: How long the current step has been running.
-- **ETA**: A live prediction of the remaining time (`< 00:15`).
-- **Speed**: Processing speed measured in items per second (`it/s`).
+By default, the CLI outputs real-time execution metrics to `stdout`:
+- **Elapsed Time**: Time spent on the current process.
+- **ETA**: Estimated time of arrival for the current process (`< 00:15`).
+- **Speed**: Processing rate in items per second (`it/s`).
 
 *Example output:*
 `▶ derivation and calculation (RDKit via Rust):`
@@ -70,43 +70,43 @@ When running normally (without `--quiet`), the CLI provides a modern, animated p
 
 ## 🎛️ Filter Arguments (Optional)
 
-FragHub acts as a boolean for filters where `1.0 = True` (Enabled) and `0.0 = False` (Disabled). All filters are **enabled by default** unless specified otherwise, matching the GUI's default behavior.
+FragHub uses standard `yes` or `no` arguments for enabling/disabling filters and outputs. All filters are **enabled by default (`yes`)** unless specified otherwise, matching the GUI's default behavior.
 
 ### General Intensity
 | Argument | Default | Description |
 | :--- | :--- | :--- |
-| `--normalize_intensity` | `1.0` | Normalize the intensity of peaks to 100%. |
-| `--remove_peak_above_precursormz` | `1.0` | Remove all peaks with an m/z greater than the precursor m/z. |
+| `--normalize_intensity` | `yes` | Normalize the intensity of peaks to 100%. |
+| `--remove_peak_above_precursormz` | `yes` | Remove all peaks with an m/z greater than the precursor m/z. |
 
 ### Minimum Peaks Rule
 | Argument | Default | Description |
 | :--- | :--- | :--- |
-| `--check_minimum_peak_requiered` | `1.0` | Enable the minimum peaks threshold filter. |
+| `--check_minimum_peak_requiered` | `yes` | Enable the minimum peaks threshold filter. |
 | `--check_minimum_peak_requiered_n_peaks` | `3.0` | Minimum number of peaks a spectrum must have to be kept. |
 
 ### Peak List Reduction
 | Argument | Default | Description |
 | :--- | :--- | :--- |
-| `--reduce_peak_list` | `1.0` | Enable reducing the peak list to the top most intense peaks. |
+| `--reduce_peak_list` | `yes` | Enable reducing the peak list to the top most intense peaks. |
 | `--reduce_peak_list_max_peaks` | `500.0` | The maximum number of top intense peaks to keep per spectrum. |
 
 ### Entropy Score Filtering
 | Argument | Default | Description |
 | :--- | :--- | :--- |
-| `--remove_spectrum_under_entropy_score` | `1.0` | Enable spectrum deletion based on its calculated entropy. |
+| `--remove_spectrum_under_entropy_score` | `yes` | Enable spectrum deletion based on its calculated entropy. |
 | `--remove_spectrum_under_entropy_score_value` | `0.5` | Threshold below which the spectrum will be deleted. |
 
 ### M/Z Range Filtering
 | Argument | Default | Description |
 | :--- | :--- | :--- |
-| `--keep_mz_in_range` | `1.0` | Enable deleting peaks outside a specific m/z range. |
+| `--keep_mz_in_range` | `yes` | Enable deleting peaks outside a specific m/z range. |
 | `--keep_mz_in_range_from_mz` | `50.0` | The minimum m/z allowed. |
 | `--keep_mz_in_range_to_mz` | `2000.0` | The maximum m/z allowed. |
 
 ### High Peaks Rule
 | Argument | Default | Description |
 | :--- | :--- | :--- |
-| `--check_minimum_of_high_peaks_requiered` | `1.0` | Enable minimum high peaks rule. |
+| `--check_minimum_of_high_peaks_requiered` | `yes` | Enable minimum high peaks rule. |
 | `--check_minimum_of_high_peaks_requiered_intensity_percent` | `5.0` | What percentage of the base peak defines a "high peak". |
 | `--check_minimum_of_high_peaks_requiered_no_peaks` | `2.0` | Minimum number of "high peaks" a spectrum must contain. |
 
@@ -116,7 +116,7 @@ FragHub acts as a boolean for filters where `1.0 = True` (Enabled) and `0.0 = Fa
 
 | Argument | Default | Description |
 | :--- | :--- | :--- |
-| `--calculate_de_novo` | `0.0` | Enable De Novo peptide fragment annotation (Requires heavy computation). |
+| `--calculate_de_novo` | `no` | Enable De Novo peptide fragment annotation (Requires heavy computation). |
 | `--de_novo_ppm_tolerance` | `10.0` | PPM tolerance used during De Novo calculations. |
 
 ---
@@ -127,10 +127,10 @@ Specify which formats you want FragHub to generate at the end of the processing 
 
 | Argument | Default | Description |
 | :--- | :--- | :--- |
-| `--csv` | `1.0` | Output data as tabular `.csv` files. |
-| `--msp` | `1.0` | Output data as `.msp` spectral files. |
-| `--json` | `1.0` | Output data as highly compacted `.json` files. |
-| `--reset_updates` | `0.0` | If `1.0`, forces FragHub to ignore previously cleaned caches and run everything from scratch in the output directory. |
+| `--csv` | `yes` | Output data as tabular `.csv` files. |
+| `--msp` | `yes` | Output data as `.msp` spectral files. |
+| `--json` | `yes` | Output data as highly compacted `.json` files. |
+| `--reset_updates` | `no` | If `yes`, forces FragHub to ignore previously cleaned caches and run everything from scratch in the output directory. |
 
 ---
 
@@ -152,9 +152,9 @@ python scripts/FragHub.py \
   --cli \
   --input_directory "/path/to/my_library.mgf" \
   --output_directory "/path/to/output_folder" \
-  --csv 0.0 \
-  --msp 0.0 \
-  --json 1.0
+  --csv no \
+  --msp no \
+  --json yes
 ```
 
 ### 3. Strict Custom Filtering
@@ -164,7 +164,7 @@ python scripts/FragHub.py \
   --cli \
   --input_directory "/data/raw/batch1/" "/data/raw/batch2/" \
   --output_directory "/data/processed/" \
-  --reset_updates 1.0 \
+  --reset_updates yes \
   --remove_spectrum_under_entropy_score_value 1.2 \
   --check_minimum_of_high_peaks_requiered_intensity_percent 10.0 \
   --check_minimum_of_high_peaks_requiered_no_peaks 5.0
