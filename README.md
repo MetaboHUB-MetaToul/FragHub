@@ -21,6 +21,7 @@
 FragHub is a powerful tool designed to standardize and organize mass spectrometry (MS) data from OMSLs (Open Mass Spectra Libraries). The main objective of FragHub is to simplify and improve the process of MS data analysis by providing standardized, consistent, and easily accessible data.<br>
 ![img_11.png](img_11.png)
 Key features:<br>
+- **High-throughput processing**: Powered by a Rust-based core engine (via PyO3), FragHub 2.0 efficiently processes large-scale mass spectrometry libraries with significantly reduced computation times.
 - **Data standardization**: FragHub standardizes field names and values of MS spectra from various databases, ensuring data consistency and compatibility.![img_12.png](img_12.png)![img_7.png](img_7.png)
 - **Optional peak list filtering**: FragHub applies filters to peak lists to streamline them by retaining only essential data, significantly reducing data size without compromising relevance for analysis.
 - **Recalculation and normalization of chemical identifiers**: The program recalculates and normalizes chemical identifiers such as SMILES, InChI, and InChIKey, ensuring a uniform representation of molecular structures.
@@ -66,6 +67,16 @@ To use this programme:
 3) Progress start. At any time you can click on STOP button to close the programme.<br>![img_5.png](img_5.png)
 4) When Progress is finish, click on FINISH button to close the programme.<br>![img_6.png](img_6.png)
 5) **DO NOT DELETE FILES INTO YOUR SELECTED OUTPUT DIRECTORY AFTER COPY CLEANED VERSIONS.**
+
+---
+
+## HEADLESS CLI MODE
+
+FragHub 2.0 introduces a headless Command Line Interface (CLI). This feature enables seamless integration into automated data pipelines, server environments, and high-performance computing (HPC) clusters, utilizing the Rust core engine without requiring a graphical user interface.
+
+Please refer to the [CLI Documentation](Documentation_CLI.md) for comprehensive usage instructions, available arguments, and pipeline integration examples.
+
+---
 
 ## FILTERS
 
