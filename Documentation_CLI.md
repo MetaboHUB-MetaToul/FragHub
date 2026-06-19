@@ -40,6 +40,34 @@ These arguments must be provided for FragHub to run.
 
 ---
 
+## 📁 Intelligent Input Resolution
+
+The `--input_directory` argument is highly flexible and features recursive folder scanning:
+- **Files**: You can specify individual files (`--input_directory file1.msp file2.mgf`).
+- **Directories**: You can provide a root directory (`--input_directory /my/data/folder`). FragHub will automatically and recursively scan all subdirectories to find any valid MS files (`.msp`, `.mgf`, `.csv`, `.json`).
+- **Mixed**: You can provide a mix of files and directories simultaneously.
+
+---
+
+## ⏱️ Advanced Progress Monitoring
+
+When running normally (without `--quiet`), the CLI provides a modern, animated progress bar giving you real-time metrics:
+- **Elapsed Time**: How long the current step has been running.
+- **ETA**: A live prediction of the remaining time (`< 00:15`).
+- **Speed**: Processing speed measured in items per second (`it/s`).
+
+*Example output:*
+`▶ derivation and calculation (RDKit via Rust):`
+`  [█████████████░░░░░░░░░] 50.0% | 500/1000 [00:15 < 00:15, 33.3 it/s]`
+
+## 🔇 Quiet Mode
+
+| Argument | Default | Description |
+| :--- | :--- | :--- |
+| `--quiet` | `False` | Silence all progress bars, step indicators, and deletion reports. The program will only output a single line upon successful completion with the total elapsed time. |
+
+---
+
 ## 🎛️ Filter Arguments (Optional)
 
 FragHub acts as a boolean for filters where `1.0 = True` (Enabled) and `0.0 = False` (Disabled). All filters are **enabled by default** unless specified otherwise, matching the GUI's default behavior.

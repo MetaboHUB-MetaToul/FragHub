@@ -4,9 +4,10 @@ import uvicorn
 import multiprocessing
 import traceback
 import time
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 import sys
 import os
@@ -21,6 +22,7 @@ else:
 
 
 is_cli_mode = "--cli" in sys.argv
+is_quiet_mode = "--quiet" in sys.argv
 
 # Redirection forcée de la sortie standard et d'erreur vers un fichier (SAUF en mode CLI)
 if not is_cli_mode:
@@ -28,9 +30,10 @@ if not is_cli_mode:
     sys.stdout = open(log_path, 'w')
     sys.stderr = sys.stdout
 
-print(f"--- Démarrage de FragHub ---")
-print(f"CWD: {os.getcwd()}")
-print(f"sys.argv: {sys.argv}")
+if not is_quiet_mode:
+    print(f"--- Démarrage de FragHub ---")
+    print(f"CWD: {os.getcwd()}")
+    print(f"sys.argv: {sys.argv}")
 
 # Variables globales
 loop = None
@@ -39,18 +42,20 @@ EMIT_THROTTLE = 0.05  # 20ms pour une fluidité maximale
 
 # Configuration Socket.IO et FastAPI
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
-app = FastAPI()
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-socket_app = socketio.ASGIApp(sio, other_asgi_app=app)
-
-@app.on_event("startup")
-def startup_event():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     global loop
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
         loop = asyncio.get_event_loop()
+    yield
+
+app = FastAPI(lifespan=lifespan)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+socket_app = socketio.ASGIApp(sio, other_asgi_app=app)
 
 class FragHubParams(BaseModel):
     input_directory: list
@@ -76,8 +81,7 @@ class FragHubParams(BaseModel):
     json_enabled: float = Field(alias='json')
     reset_updates: float
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 def emit_to_frontend(event, data):
     global loop, last_emit_time
@@ -192,6 +196,7 @@ if __name__ == "__main__":
         import argparse
         parser = argparse.ArgumentParser(description="FragHub CLI Mode")
         parser.add_argument("--cli", action="store_true", help="Enable CLI mode")
+        parser.add_argument("--quiet", action="store_true", help="Silence all progress bars and only print final success and total time")
         parser.add_argument("--input_directory", nargs='+', required=True, help="List of input files/directories")
         parser.add_argument("--output_directory", type=str, required=True, help="Output directory path")
         
@@ -242,44 +247,87 @@ if __name__ == "__main__":
         args_dict['input_directory'] = resolved_files
         parameters_dict.update(args_dict)
         
-        print("\n========================================")
-        print("          FragHub CLI Mode Actif          ")
-        print("========================================\n")
+        if not args.quiet:
+            print("\n========================================")
+            print("          FragHub CLI Mode Actif          ")
+            print("========================================\n")
         
         # Chargement initial des bases
         fraghub_rust.load_internal_databases(BASE_DIR)
         
+        global_start_time = time.time()
+        
         # Variables pour la barre de progression en console
         cli_total_items = [0]
         cli_current_prefix = [""]
+        cli_start_time = [0.0]
         
-        def cli_progress_callback(val):
+        def cli_progress_callback(*cb_args):
+            if args.quiet or not cb_args: return
+            val = cb_args[0]
             total = cli_total_items[0]
+            start_t = cli_start_time[0]
             if total > 0:
-                percent = (val / total) * 100
-                # Utilisation de \r pour rafraîchir la même ligne
-                print(f"\r{cli_current_prefix[0]} {val}/{total} ({percent:.1f}%)", end="", flush=True)
+                percent = val / total
+                bar_length = 30
+                filled_length = int(bar_length * percent)
+                bar = '█' * filled_length + '░' * (bar_length - filled_length)
+                
+                # Calculs de temps et vitesse
+                elapsed = time.time() - start_t
+                speed = val / elapsed if elapsed > 0 else 0
+                remaining = (total - val) / speed if speed > 0 else 0
+                
+                def format_time(seconds):
+                    if seconds == float('inf') or seconds < 0: return "--:--"
+                    m, s = divmod(int(seconds), 60)
+                    h, m = divmod(m, 60)
+                    if h > 0: return f"{h:02d}:{m:02d}:{s:02d}"
+                    return f"{m:02d}:{s:02d}"
+                
+                # Couleurs ANSI (Bleu clair = en cours, Vert = terminé)
+                color = '\033[96m' if val < total else '\033[92m'
+                reset = '\033[0m'
+                
+                stats = f"[{format_time(elapsed)} < {format_time(remaining)}, {speed:.1f} it/s]"
+                
+                # \033[K permet d'effacer le reste de la ligne pour éviter les artefacts visuels
+                print(f"\r  {color}[{bar}]{reset} {percent*100:.1f}% | {val}/{total} {stats}\033[K", end="", flush=True)
                 if val >= total:
                     print() # Nouvelle ligne à 100%
                     
-        def cli_total_items_callback(val):
-            cli_total_items[0] = val
+        def cli_total_items_callback(*cb_args):
+            if cb_args:
+                cli_total_items[0] = cb_args[0]
+                cli_start_time[0] = time.time() # Reset chrono au début de chaque étape
             
-        def cli_prefix_callback(prefix):
+        def cli_prefix_callback(*cb_args):
+            if args.quiet or not cb_args: return
+            prefix = cb_args[0]
             cli_current_prefix[0] = prefix
-            print(f"\n>> {prefix}")
+            # Flèche de tâche et texte en blanc/gris
+            print(f"\n\033[1;37m▶ {prefix}\033[0m")
             
-        def cli_item_type_callback(item_type):
-            pass # Non nécessaire en CLI (déjà implicite dans le prefix)
+        def cli_item_type_callback(*cb_args):
+            pass # Non nécessaire en CLI
             
-        def cli_step_callback(step):
-            print(f"\n[STEP] {step}")
+        def cli_step_callback(*cb_args):
+            if args.quiet or not cb_args: return
+            step = cb_args[0]
+            # Étape principale en jaune et en gras
+            print(f"\n\033[1;33m=== {step} ===\033[0m")
             
-        def cli_completion_callback(msg):
-            print(f"\n[DONE] {msg}\n")
+        def cli_completion_callback(*cb_args):
+            if args.quiet or not cb_args: return
+            msg = cb_args[0]
+            # Message de fin en vert
+            print(f"\n\033[1;32m✔ {msg}\033[0m\n")
             
-        def cli_deletion_callback(msg):
-            print(f"[REPORT] {msg}")
+        def cli_deletion_callback(*cb_args):
+            if args.quiet or not cb_args: return
+            msg = cb_args[0]
+            # Rapports de suppression en rouge/orange
+            print(f"\033[38;5;208m[REPORT] {msg}\033[0m")
             
         def cli_get_stop_flag():
             return False # Pas d'interruption via UI en mode CLI (l'utilisateur fera Ctrl+C)
@@ -300,6 +348,20 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"\n[ERROR] Une erreur s'est produite : {e}")
             sys.exit(1)
+            
+        # Calcul et affichage du temps total
+        total_time = time.time() - global_start_time
+        def format_total(seconds):
+            m, s = divmod(int(seconds), 60)
+            h, m = divmod(m, 60)
+            if h > 0: return f"{h}h {m}m {s}s"
+            if m > 0: return f"{m}m {s}s"
+            return f"{s}s"
+            
+        if args.quiet:
+            print(f"FragHub processed successfully in {format_total(total_time)}.")
+        else:
+            print(f"\n\033[1;32m★ All tasks completed successfully in {format_total(total_time)} ★\033[0m\n")
             
         sys.exit(0)
     else:
