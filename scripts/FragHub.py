@@ -20,10 +20,13 @@ else:
     BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 
-# Redirection forcée de la sortie standard et d'erreur vers un fichier
-log_path = os.path.join(os.path.expanduser("~"), "fraghub_debug.txt")
-sys.stdout = open(log_path, 'w')
-sys.stderr = sys.stdout
+is_cli_mode = "--cli" in sys.argv
+
+# Redirection forcée de la sortie standard et d'erreur vers un fichier (SAUF en mode CLI)
+if not is_cli_mode:
+    log_path = os.path.join(os.path.expanduser("~"), "fraghub_debug.txt")
+    sys.stdout = open(log_path, 'w')
+    sys.stderr = sys.stdout
 
 print(f"--- Démarrage de FragHub ---")
 print(f"CWD: {os.getcwd()}")
@@ -184,4 +187,121 @@ async def run_analysis(params: FragHubParams, background_tasks: BackgroundTasks)
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()
-    uvicorn.run(socket_app, host="127.0.0.1", port=8000)
+    
+    if is_cli_mode:
+        import argparse
+        parser = argparse.ArgumentParser(description="FragHub CLI Mode")
+        parser.add_argument("--cli", action="store_true", help="Enable CLI mode")
+        parser.add_argument("--input_directory", nargs='+', required=True, help="List of input files/directories")
+        parser.add_argument("--output_directory", type=str, required=True, help="Output directory path")
+        
+        # Filtres et options (avec valeurs par défaut identiques à l'UI Vue.js)
+        parser.add_argument("--normalize_intensity", type=float, default=1.0)
+        parser.add_argument("--remove_peak_above_precursormz", type=float, default=1.0)
+        parser.add_argument("--check_minimum_peak_requiered", type=float, default=1.0)
+        parser.add_argument("--check_minimum_peak_requiered_n_peaks", type=float, default=3.0)
+        parser.add_argument("--reduce_peak_list", type=float, default=1.0)
+        parser.add_argument("--reduce_peak_list_max_peaks", type=float, default=500.0)
+        parser.add_argument("--remove_spectrum_under_entropy_score", type=float, default=1.0)
+        parser.add_argument("--remove_spectrum_under_entropy_score_value", type=float, default=0.5)
+        parser.add_argument("--keep_mz_in_range", type=float, default=1.0)
+        parser.add_argument("--keep_mz_in_range_from_mz", type=float, default=50.0)
+        parser.add_argument("--keep_mz_in_range_to_mz", type=float, default=2000.0)
+        parser.add_argument("--check_minimum_of_high_peaks_requiered", type=float, default=1.0)
+        parser.add_argument("--check_minimum_of_high_peaks_requiered_intensity_percent", type=float, default=5.0)
+        parser.add_argument("--check_minimum_of_high_peaks_requiered_no_peaks", type=float, default=2.0)
+        parser.add_argument("--calculate_de_novo", type=float, default=0.0)
+        parser.add_argument("--de_novo_ppm_tolerance", type=float, default=10.0)
+        parser.add_argument("--csv", type=float, default=1.0)
+        parser.add_argument("--msp", type=float, default=1.0)
+        parser.add_argument("--json", type=float, default=1.0)
+        parser.add_argument("--reset_updates", type=float, default=0.0)
+        
+        args = parser.parse_args()
+        
+        # Résolution intelligente des chemins (fichiers et dossiers)
+        resolved_files = []
+        for path in args.input_directory:
+            if os.path.isfile(path):
+                resolved_files.append(os.path.abspath(path))
+            elif os.path.isdir(path):
+                # Parcourt tous les sous-dossiers à la recherche de fichiers valides
+                for root, _, files in os.walk(path):
+                    for file in files:
+                        if file.lower().endswith(('.msp', '.mgf', '.csv', '.json')):
+                            resolved_files.append(os.path.abspath(os.path.join(root, file)))
+            else:
+                print(f"[WARNING] Le chemin spécifié est introuvable : {path}")
+
+        if not resolved_files:
+            print("\n[ERROR] Aucun fichier MS valide (.msp, .mgf, .csv, .json) trouvé dans les chemins spécifiés.")
+            sys.exit(1)
+            
+        # Hydratation du parameters_dict avec les fichiers résolus
+        args_dict = vars(args)
+        args_dict['input_directory'] = resolved_files
+        parameters_dict.update(args_dict)
+        
+        print("\n========================================")
+        print("          FragHub CLI Mode Actif          ")
+        print("========================================\n")
+        
+        # Chargement initial des bases
+        fraghub_rust.load_internal_databases(BASE_DIR)
+        
+        # Variables pour la barre de progression en console
+        cli_total_items = [0]
+        cli_current_prefix = [""]
+        
+        def cli_progress_callback(val):
+            total = cli_total_items[0]
+            if total > 0:
+                percent = (val / total) * 100
+                # Utilisation de \r pour rafraîchir la même ligne
+                print(f"\r{cli_current_prefix[0]} {val}/{total} ({percent:.1f}%)", end="", flush=True)
+                if val >= total:
+                    print() # Nouvelle ligne à 100%
+                    
+        def cli_total_items_callback(val):
+            cli_total_items[0] = val
+            
+        def cli_prefix_callback(prefix):
+            cli_current_prefix[0] = prefix
+            print(f"\n>> {prefix}")
+            
+        def cli_item_type_callback(item_type):
+            pass # Non nécessaire en CLI (déjà implicite dans le prefix)
+            
+        def cli_step_callback(step):
+            print(f"\n[STEP] {step}")
+            
+        def cli_completion_callback(msg):
+            print(f"\n[DONE] {msg}\n")
+            
+        def cli_deletion_callback(msg):
+            print(f"[REPORT] {msg}")
+            
+        def cli_get_stop_flag():
+            return False # Pas d'interruption via UI en mode CLI (l'utilisateur fera Ctrl+C)
+            
+        try:
+            # Lancement de l'orchestrateur de façon synchrone dans le thread principal
+            fraghub_rust.main_orchestrator(
+                parameters_dict,
+                cli_progress_callback,
+                cli_total_items_callback,
+                cli_prefix_callback,
+                cli_item_type_callback,
+                cli_step_callback,
+                cli_completion_callback,
+                cli_deletion_callback,
+                cli_get_stop_flag
+            )
+        except Exception as e:
+            print(f"\n[ERROR] Une erreur s'est produite : {e}")
+            sys.exit(1)
+            
+        sys.exit(0)
+    else:
+        # Lancement normal du GUI (FastAPI / Uvicorn / WebSockets)
+        uvicorn.run(socket_app, host="127.0.0.1", port=8000)
