@@ -2,6 +2,12 @@
 use pyo3::prelude::*;
 use crate::spectrum::Spectrum;
 
+/// Complète les spectres avec les données issues de PubChem.
+///
+/// Pour un développeur Python : Au lieu de faire un `.merge()` extrêmement coûteux
+/// en RAM avec Pandas, on itère simplement sur notre liste de spectres (`iter_mut()`).
+/// Si l'INCHIKEY du spectre existe dans le dictionnaire `pubchem_datas` (déjà chargé en RAM
+/// par `loading_db.rs`), on copie instantanément les valeurs manquantes sans recréer de nouvelle table.
 pub fn complete_from_pubchem_datas(
     py: Python,
     mut spectrum_list: Vec<Spectrum>,

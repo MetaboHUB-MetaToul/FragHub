@@ -6,11 +6,31 @@ use rayon::prelude::*;
 use std::collections::HashMap;
 
 // 1. La structure pour passer les données entre les cœurs CPU sans bloquer Python
+/// Structure interne pour le multithreading.
+///
+/// Pour un développeur Python : En Python, les objets créés dans différents processus
+/// doivent être sérialisés (Pickle) pour être renvoyés au processus principal, ce qui est très lent.
+/// En Rust, on passe cette structure entre les threads (cœurs CPU) de manière ultra-rapide
+/// et sans copie superflue de la mémoire.
 struct ParsedSpectrum {
     metadata: HashMap<String, String>,
     peaks: Vec<Vec<f64>>,
 }
 
+/// Fonction principale de parsing MGF via Rayon.
+///
+/// # Arguments
+/// * `py` (Python) : Le token PyO3.
+/// * `final_mgf` (Vec<String>) : Les spectres MGF bruts.
+/// * `keys_dict` (HashMap<String, String>) : Mapping des clés.
+/// * `keys_list` (Vec<String>) : Liste des clés à conserver.
+/// * `progress_callback` (Option<PyObject>) : Callback de progression.
+/// * `total_items_callback` (Option<PyObject>) : Callback de total.
+/// * `prefix_callback` (Option<PyObject>) : Callback du préfixe.
+/// * `item_type_callback` (Option<PyObject>) : Callback du type.
+///
+/// # Returns
+/// * `PyResult<Vec<Spectrum>>` : La liste de spectres parsés.
 pub fn mgf_to_dict_processing(
     py: Python,
     final_mgf: Vec<String>,

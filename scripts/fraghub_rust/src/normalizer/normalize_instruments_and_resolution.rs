@@ -3,6 +3,11 @@ use std::collections::HashMap;
 use regex::Regex;
 use once_cell::sync::Lazy;
 
+/// Nettoie les informations de base des instruments.
+/// 
+/// Pour un développeur Python : L'utilisation de `Lazy::new()` permet de compiler les regex
+/// une seule fois au premier appel (équivalent à compiler ses regex globalement en Python), 
+/// évitant de tuer les performances en les recompilant à chaque passage.
 fn apply_common_cleaning(mut s: String) -> String {
     s = s.replace("-tof", "tof");
     s = s.replace("q-", "q");
@@ -23,6 +28,7 @@ fn apply_common_cleaning(mut s: String) -> String {
     s
 }
 
+/// Fusionne et nettoie divers champs (INSTRUMENT, INSTRUMENTTYPE, COMMENT)
 fn clean_spectrum_instrument_info(metadata_dict: &HashMap<String, String>) -> String {
     let instrument = apply_common_cleaning(metadata_dict.get("INSTRUMENT").cloned().unwrap_or_default().to_lowercase());
 
@@ -40,15 +46,18 @@ fn clean_spectrum_instrument_info(metadata_dict: &HashMap<String, String>) -> St
     static CLEAN_CHARS: Lazy<Regex> = Lazy::new(|| Regex::new(r"[^-\w\s]").unwrap());
     let cleaned = CLEAN_CHARS.replace_all(&infos, " ").into_owned();
 
+    // `.split_whitespace().collect::<Vec<&str>>().join(" ")` enlève les doubles espaces.
     cleaned.split_whitespace().collect::<Vec<&str>>().join(" ")
 }
 
 // Remplace la lenteur du regex rf"(\b|^|$){key}(\b|^|$)" de Python par une vérification native ultra-rapide
+// Python utilise un moteur Regex basé sur le langage C, mais les appels répétés en Python coûtent cher.
+// En Rust, analyser directement les octets (`bytes`) est immensément plus rapide.
 fn is_word_char(b: u8) -> bool { b.is_ascii_alphanumeric() || b == b'_' }
 
 fn contains_word(text: &str, word: &str) -> bool {
     if word.is_empty() { return false; }
-    let text_bytes = text.as_bytes();
+    let text_bytes = text.as_bytes(); // Travaille directement sur les octets ASCII
     let word_bytes = word.as_bytes();
     let word_len = word_bytes.len();
 
@@ -57,6 +66,7 @@ fn contains_word(text: &str, word: &str) -> bool {
         let actual_pos = start + pos;
         let end_pos = actual_pos + word_len;
 
+        // Vérifie les limites du mot (boundaries)
         let is_left_boundary = actual_pos == 0 || !is_word_char(text_bytes[actual_pos - 1]);
         let is_right_boundary = end_pos == text_bytes.len() || !is_word_char(text_bytes[end_pos]);
 
@@ -66,6 +76,9 @@ fn contains_word(text: &str, word: &str) -> bool {
     false
 }
 
+/// Parcourt l'arborescence (arbre JSON de configuration) pour résoudre l'instrument.
+/// La syntaxe `<'a>` décrit une "Lifetime" (durée de vie). Elle indique au compilateur que les 
+/// références retournées par la fonction vivront aussi longtemps que l'arbre `tree` passé en paramètre.
 fn search_level<'a>(tree: &'a serde_json::Value, infos: &str) -> Option<(&'a String, &'a serde_json::Value)> {
     if let Some(map) = tree.as_object() {
         for (key, next_level) in map {
@@ -75,6 +88,14 @@ fn search_level<'a>(tree: &'a serde_json::Value, infos: &str) -> Option<(&'a Str
     None
 }
 
+/// Identifie avec précision le modèle d'instrument, le type d'ionisation et la résolution.
+///
+/// # Arguments
+/// * `metadata_dict` (HashMap<String, String>) : Le dictionnaire des métadonnées du spectre.
+/// * `context` (&super::NormalizerContext) : Contexte contenant l'arbre de décision JSON des instruments.
+///
+/// # Returns
+/// * `HashMap<String, String>` : Le dictionnaire mis à jour avec INSTRUMENT, INSTRUMENTTYPE, RESOLUTION.
 pub fn normalize_instruments_and_resolution(mut metadata_dict: HashMap<String, String>, context: &super::NormalizerContext) -> HashMap<String, String> {
     let instrument_infos = clean_spectrum_instrument_info(&metadata_dict);
     let infos = format!(". {} .", instrument_infos);
@@ -96,6 +117,7 @@ pub fn normalize_instruments_and_resolution(mut metadata_dict: HashMap<String, S
         else if res_level.contains_key("low") { "low" }
         else { "unknown" };
 
+        // Chaînage de méthodes sécurisé via `and_then` pour naviguer dans l'objet JSON.
         if let Some(solution_str) = res_level.get(resolution).and_then(|r| r.get("SOLUTION")).and_then(|s| s.as_str()) {
             let parts: Vec<&str> = solution_str.split(',').collect();
             if parts.len() >= 3 {

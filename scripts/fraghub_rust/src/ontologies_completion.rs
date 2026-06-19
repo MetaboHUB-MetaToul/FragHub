@@ -2,6 +2,11 @@
 use pyo3::prelude::*;
 use crate::spectrum::Spectrum;
 
+/// Ajoute les classes chimiques (ClassyFire et NPClassifier) aux spectres.
+///
+/// Pour un développeur Python : La même logique ultra-rapide que pour PubChem s'applique ici.
+/// Pas de jointures SQL ou Pandas. Un simple "Lookup" (recherche) en `O(1)` dans le dictionnaire
+/// des ontologies. Si l'INCHIKEY correspond, on transfère la classe chimique.
 pub fn ontologies_completion_processing(
     py: Python,
     mut spectrum_list: Vec<Spectrum>,

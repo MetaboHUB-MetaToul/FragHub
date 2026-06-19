@@ -8,6 +8,25 @@ use crate::convertors::mgf_to_dict::mgf_to_dict_processing;
 use crate::convertors::csv_to_dict::load_and_parse_csv;
 use crate::spectrum::Spectrum;
 
+/// Orchestrateur principal de parsing. Route les fichiers vers le bon parseur (JSON, MSP, MGF, CSV).
+///
+/// Pour un développeur Python : C'est la fonction "Chef d'Orchestre". Elle extrait l'état global 
+/// (les clés de dictionnaire), trie les fichiers par extension, puis lance les bonnes routines
+/// de parsing multi-threadées. Notez l'utilisation de `py.allow_threads(...)` qui libère le GIL
+/// pour permettre à l'interface graphique (Python/Electron) de ne pas se bloquer (freezer) pendant le traitement.
+///
+/// # Arguments
+/// * `py` (Python) : Le token d'accès au GIL Python (fourni par PyO3).
+/// * `input_paths` (Vec<String>) : Liste des chemins absolus vers les fichiers à traiter.
+/// * `progress_callback` (Option<PyObject>) : Callback pour la progression globale.
+/// * `total_items_callback` (Option<PyObject>) : Callback pour indiquer le nombre total d'éléments.
+/// * `prefix_callback` (Option<PyObject>) : Callback pour mettre à jour le message texte de l'UI.
+/// * `item_type_callback` (Option<PyObject>) : Callback pour spécifier le type d'élément traité.
+/// * `step_callback` (Option<PyObject>) : Callback pour indiquer l'étape en cours.
+///
+/// # Returns
+/// * `PyResult<(Vec<Spectrum>, Vec<Spectrum>, Vec<Spectrum>, Vec<Spectrum>)>` : Un tuple de 4 listes
+///   de spectres correspondant aux 4 formats de fichiers (MSP, CSV, JSON, MGF).
 pub fn parsing_to_dict_processing(
     py: Python,
     input_paths: Vec<String>,

@@ -3,6 +3,12 @@ use pyo3::prelude::*;
 use rayon::prelude::*;
 use crate::spectrum::Spectrum;
 
+/// Trie les spectres dans 8 catégories (LC/GC, POS/NEG, IN_SILICO/EXP).
+///
+/// Pour un développeur Python : Voici une merveille de "Programmation Fonctionnelle" en Rust.
+/// On utilise `par_iter().fold(...).reduce(...)`. C'est le principe ultra-rapide de "Map-Reduce".
+/// Chaque cœur CPU trie son propre petit paquet de spectres (`fold`), puis Rust fusionne (`reduce`)
+/// tous ces paquets à la fin. Aucun thread ne bloque un autre, la RAM n'est pas fragmentée !
 pub fn master_splitter(
     py: Python,
     spectrum_list: &Vec<Spectrum>,

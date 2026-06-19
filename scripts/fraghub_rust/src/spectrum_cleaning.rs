@@ -7,6 +7,28 @@ use std::fs;
 use std::path::Path;
 use csv::WriterBuilder;
 
+/// Moteur principal de nettoyage et de filtrage d'une liste de spectres.
+///
+/// Pour un développeur Python : Ce module coordonne toutes les étapes de nettoyage
+/// (normalisation, filtres, calcul de l'entropie) pour un gros paquet (chunk) de spectres.
+/// Observez l'utilisation élégante des `Result<Ok, Err>` (où `Err` capture le spectre rejeté ET son motif).
+/// Les spectres rejetés sont ensuite extraits et sauvegardés directement dans des fichiers CSV "DELETED_SPECTRUMS" 
+/// à la volée, sans interrompre le flux principal des spectres valides (`Ok`).
+///
+/// # Arguments
+/// * `py` (Python) : Le token d'accès au GIL.
+/// * `spectrum_list` (Vec<Spectrum>) : Liste de spectres à nettoyer.
+/// * `output_directory` (String) : Répertoire de sortie (pour y sauvegarder les spectres supprimés).
+/// * `ordered_columns` (Vec<String>) : Liste des colonnes pour le CSV de sortie.
+/// * `deletion_report` (&mut crate::deletion_report::DeletionReport) : Structure mutable pour suivre le compteur des suppressions.
+/// * `parameters_dict` (&std::collections::HashMap<String, f64>) : Paramètres utilisateurs (seuils, filtres activés...).
+/// * `progress_callback` (Option<PyObject>) : Callback de progression.
+/// * `total_items_callback` (Option<PyObject>) : Callback du nombre total.
+/// * `prefix_callback` (Option<PyObject>) : Callback du préfixe.
+/// * `item_type_callback` (Option<PyObject>) : Callback du type d'élément.
+///
+/// # Returns
+/// * `PyResult<Vec<Spectrum>>` : La liste filtrée contenant uniquement les spectres valides.
 pub fn spectrum_cleaning_processing(
     py: Python,
     spectrum_list: Vec<Spectrum>,

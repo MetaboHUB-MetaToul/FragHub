@@ -11,6 +11,18 @@ struct ParsedJsonSpectrum {
     peaks: Vec<(f64, f64)>,
 }
 
+/// Parseur natif et ultra-rapide de listes de pics JSON.
+///
+/// Pour un développeur Python : Observez le mot-clé `unsafe`. En Rust, lire directement
+/// la RAM en ignorant la vérification UTF-8 peut faire crasher le programme si les données 
+/// sont invalides. Ici, on utilise `unsafe` car on a déjà vérifié à la main (via `is_ascii_digit()`) 
+/// que les octets étaient valides. C'est ce type d'astuce qui rend Rust aussi rapide que le C ou le C++.
+///
+/// # Arguments
+/// * `peak_list_string` (&str) : La liste de pics sous forme de texte brut.
+///
+/// # Returns
+/// * `Vec<(f64, f64)>` : La liste des tuples `(m/z, intensité)`.
 fn parse_json_peak_list_rust(peak_list_string: &str) -> Vec<(f64, f64)> {
     let bytes = peak_list_string.as_bytes();
     let mut numbers = Vec::with_capacity(1024);
@@ -56,6 +68,25 @@ fn parse_json_peak_array(val: &serde_json::Value) -> Vec<(f64, f64)> {
     peaks
 }
 
+/// Fonction principale de parsing JSON via Rayon.
+///
+/// Pour un développeur Python : C'est ici que l'on remplace le `multiprocessing` de Python.
+/// `.into_par_iter()` (fourni par la librairie Rayon) transforme instantanément notre boucle for
+/// en une boucle multithreadée. Pas besoin de gérer les Process, les Queues ou de `pickle` les données :
+/// Rayon s'occupe de répartir la charge sur tous les cœurs du processeur sans aucune fuite de mémoire.
+///
+/// # Arguments
+/// * `py` (Python) : Le token PyO3 pour appeler les callbacks.
+/// * `rust_strings` (Vec<String>) : Les spectres JSON sous forme de chaîne de caractères.
+/// * `keys_dict` (HashMap<String, String>) : Le mapping des clés.
+/// * `keys_list` (Vec<String>) : La liste des colonnes requises.
+/// * `progress_callback` (Option<PyObject>) : Callback de progression.
+/// * `total_items_callback` (Option<PyObject>) : Callback du nombre total.
+/// * `prefix_callback` (Option<PyObject>) : Callback du préfixe texte.
+/// * `item_type_callback` (Option<PyObject>) : Callback du type d'élément.
+///
+/// # Returns
+/// * `PyResult<Vec<Spectrum>>` : La liste de spectres parsée en parallèle.
 pub fn json_to_dict_processing(
     py: Python,
     mut rust_strings: Vec<String>,

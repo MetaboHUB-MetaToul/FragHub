@@ -5,11 +5,34 @@ use rayon::prelude::*;
 use std::collections::HashMap;
 
 
+/// Structure interne pour le multithreading MSP.
+///
+/// Pour un développeur Python : Remarquez le `Vec<(f64, f64)>` au lieu d'une liste de listes `[[f64, f64]]`.
+/// En Rust, les tuples `(f64, f64)` sont stockés de manière contiguë (les uns à côté des autres)
+/// en mémoire RAM, ce qui évite la fragmentation mémoire et accélère drastiquement les accès.
 struct ParsedSpectrum {
     metadata: HashMap<String, String>,
     peaks: Vec<(f64, f64)>, // <-- TUPLES : Fini la fragmentation mémoire !
 }
 
+/// Fonction principale de parsing MSP via Rayon.
+///
+/// Pour un développeur Python : Le `filter_map` combiné au `par_iter` agit comme une compréhension 
+/// de liste multi-threadée qui écarte automatiquement les valeurs `None`. Cela évite d'avoir à faire 
+/// un filtrage manuel des "mauvais" spectres à la fin.
+///
+/// # Arguments
+/// * `py` (Python) : Le token PyO3.
+/// * `rust_strings` (Vec<String>) : Les spectres MSP bruts.
+/// * `keys_dict` (HashMap<String, String>) : Mapping des clés.
+/// * `keys_list` (Vec<String>) : Liste des clés à conserver.
+/// * `progress_callback` (Option<PyObject>) : Callback de progression.
+/// * `total_items_callback` (Option<PyObject>) : Callback de total.
+/// * `prefix_callback` (Option<PyObject>) : Callback du préfixe.
+/// * `item_type_callback` (Option<PyObject>) : Callback du type.
+///
+/// # Returns
+/// * `PyResult<Vec<Spectrum>>` : La liste de spectres parsés.
 pub fn msp_to_dict_processing(
     py: Python,
     rust_strings: Vec<String>,

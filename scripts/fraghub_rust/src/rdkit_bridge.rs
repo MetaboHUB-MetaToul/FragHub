@@ -5,6 +5,13 @@ use crate::globals_vars::{INDIGO_SMILES_CORRECTION_PATTERN, INCHIKEY_PATTERN};
 use std::fs;
 use std::path::Path;
 
+/// Orchestre le recalcul des formules et des masses à l'aide de RDKit (qui tourne en Python).
+///
+/// Pour un développeur Python : C'est ici qu'on fait le "pont" (bridge) entre la vitesse de Rust
+/// et la puissance de la librairie Python RDKit. L'astuce cruciale est l'utilisation d'un `cache`
+/// en RAM (HashMap). Comme on croise souvent les mêmes molécules, Rust va mémoriser les résultats
+/// de RDKit pour ne jamais recalculer deux fois la même chose. C'est ce qui fait passer le
+/// temps de calcul de plusieurs heures à quelques minutes.
 pub fn process_mols(
     py: Python,
     spectrum_list: Vec<Spectrum>,

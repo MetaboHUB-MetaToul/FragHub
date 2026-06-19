@@ -39,6 +39,12 @@ impl SplashSpectrum {
     }
 }
 
+/// Calcule le SPLASH (l'empreinte digitale unique) d'un spectre de masse.
+///
+/// Pour un développeur Python : Cette fonction effectue un hachage très complexe sur les pics.
+/// En Python, de lourdes manipulations de chaînes et des tris (`sort()`) répétés sur chaque spectre
+/// finiraient par bloquer le processeur. Ici, tout s'exécute à un niveau extrêmement bas (sur les
+/// octets directement via la crate `sha2`) avec un tri très optimisé, ce qui est foudroyant de vitesse.
 fn calculate_splash(spectrum: &SplashSpectrum) -> Option<String> {
     if spectrum.peaks.is_empty() { return None; }
     let initial_block = "splash10";
@@ -93,6 +99,11 @@ fn calculate_splash(spectrum: &SplashSpectrum) -> Option<String> {
     Some(format!("{}-{}-{}-{}", initial_block, prefilter_block, similarity_block, exact_hash))
 }
 
+/// Point d'entrée pour la génération parallèle des identifiants SPLASH.
+///
+/// Pour un développeur Python : Observez `par_iter()` de Rayon, qui découpe intelligemment 
+/// les `chunks` de spectres entre les cœurs CPU. La fonction gère aussi des "Callbacks" (appels) 
+/// vers Python/Vue.js pour animer la barre de progression graphique sans bloquer l'interface.
 pub fn generate_splash_processing(
     py: Python,
     mut spectrum_list: Vec<crate::spectrum::Spectrum>,

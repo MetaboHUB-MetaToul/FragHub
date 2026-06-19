@@ -24,6 +24,28 @@ use crate::report::generate_report_processing;
 use crate::set_projects::{init_project, reset_updates};
 use crate::deletion_report::DeletionReport;
 
+/// La "Tour de Contrôle" de l'application Rust.
+///
+/// Pour un développeur Python : C'est l'équivalent du script principal (votre ancien `main.py`).
+/// C'est cette fonction précise que l'interface Vue.js (via Python) appelle lorsqu'on clique sur "Lancer".
+/// Observez comment on extrait les arguments Python (`parameters_dict`) et comment on appelle
+/// régulièrement `check_stop_flag()` pour permettre à l'utilisateur d'annuler le traitement 
+/// depuis l'interface à n'importe quel moment, proprement.
+///
+/// # Arguments
+/// * `py` (Python) : Token d'accès au GIL.
+/// * `parameters_dict` (&PyDict) : Les paramètres choisis par l'utilisateur dans l'UI.
+/// * `progress_callback` (Option<PyObject>) : Fonction de rappel pour la progression.
+/// * `total_items_callback` (Option<PyObject>) : Fonction de rappel pour le nombre total d'éléments.
+/// * `prefix_callback` (Option<PyObject>) : Fonction de rappel pour l'étape en cours.
+/// * `item_type_callback` (Option<PyObject>) : Fonction de rappel pour l'unité (spectra, MB, etc.).
+/// * `step_callback` (Option<PyObject>) : Fonction de rappel pour le log.
+/// * `completion_callback` (Option<PyObject>) : Fonction de rappel pour la fin de processus.
+/// * `deletion_callback` (Option<PyObject>) : Fonction de rappel pour les rapports de suppression.
+/// * `stop_flag` (Option<PyObject>) : Fonction de rappel (bool) indiquant si l'utilisateur a cliqué sur "Stop".
+///
+/// # Returns
+/// * `PyResult<i32>` : 0 si le traitement a réussi.
 #[pyfunction]
 #[pyo3(signature = (parameters_dict, progress_callback=None, total_items_callback=None, prefix_callback=None, item_type_callback=None, step_callback=None, completion_callback=None, deletion_callback=None, stop_flag=None))]
 pub fn main_orchestrator(

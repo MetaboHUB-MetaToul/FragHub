@@ -1,6 +1,13 @@
 // src/lib.rs
 use pyo3::prelude::*;
 
+/// Module principal ("Crate Root") de l'extension Rust pour Python (PyO3).
+///
+/// Pour un développeur Python : C'est l'équivalent du fichier `__init__.py`. 
+/// Il déclare tous les sous-fichiers (`pub mod ...`) pour que le compilateur Rust les inclue.
+/// En bas, la macro `#[pymodule]` crée le point d'entrée que Python appellera
+/// quand vous ferez `import fraghub_rust`.
+
 // Déclaration de vos modules
 pub mod spectrum;
 pub mod globals_vars;

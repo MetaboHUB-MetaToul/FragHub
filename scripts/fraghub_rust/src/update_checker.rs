@@ -6,6 +6,11 @@ use std::fs;
 use std::path::Path;
 use csv::WriterBuilder;
 
+/// Vérifie quels spectres ont déjà été traités lors d'une session précédente.
+///
+/// Pour un développeur Python : Un "Set" (ensemble) en Python utilise des hash tables. En Rust, 
+/// on utilise un `HashSet`. La différence est que la recherche `.contains()` est garantie en `O(1)`
+/// de manière très stricte et déterministe au niveau de la RAM, là où Python ajoute une couche d'abstraction ("overhead").
 pub fn check_for_update_processing(
     py: Python,
     spectrum_list: Vec<Spectrum>,

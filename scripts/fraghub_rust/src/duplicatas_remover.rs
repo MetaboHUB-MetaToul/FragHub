@@ -6,6 +6,12 @@ use std::fs;
 use std::path::Path;
 use csv::WriterBuilder;
 
+/// Supprime les doublons (spectres identiques) en gardant celui qui contient le plus de métadonnées.
+///
+/// Pour un développeur Python : Retirer des doublons est très long si c'est mal optimisé (`drop_duplicates` etc.).
+/// En Rust, on fait un seul passage (`O(N)`) sur les spectres. On calcule la taille (en caractères)
+/// des métadonnées de chaque spectre, et on stocke l'index du "gagnant" (le plus gros) dans
+/// une table de hachage (`best_indices`) utilisant un Tuple `(SPLASH, INCHIKEY)` comme clé composite.
 pub fn remove_duplicatas_processing(
     py: Python,
     spectrum_list: Vec<Spectrum>,

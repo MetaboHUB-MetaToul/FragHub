@@ -10,6 +10,15 @@ use std::time::{Duration, Instant};
 
 
 /// Gets the size of a file in bytes, converts it to a string, and returns the SHA-256 hash.
+///
+/// Pour un développeur Python : La macro `#[pyfunction]` indique à PyO3 que cette fonction
+/// Rust doit être compilée et exposée comme une fonction appelable directement depuis Python.
+///
+/// # Arguments
+/// * `file_path` (&str) : Le chemin du fichier.
+///
+/// # Returns
+/// * `String` : Le hash SHA-256 de la taille du fichier.
 #[pyfunction]
 pub fn generate_file_hash(file_path: &str) -> String {
     if let Ok(metadata) = std::fs::metadata(file_path) {
@@ -25,6 +34,23 @@ pub fn generate_file_hash(file_path: &str) -> String {
 // ----------------------------------------------------------------------
 // RUST NATIVE JSON LOADER (Array Format - GNPS)
 // ----------------------------------------------------------------------
+/// Lecteur de très gros fichiers JSON.
+///
+/// Pour un développeur Python : Au lieu de faire un `json.load()` qui chargerait
+/// un fichier de 5 Go entièrement en RAM (et ferait probablement planter la machine par un OutOfMemoryError),
+/// on lit le fichier "morceau par morceau" (Chunks) grâce à un `BufReader`.
+/// On parcourt directement les octets (`bytes`) du disque pour extraire les spectres un à un très rapidement.
+///
+/// # Arguments
+/// * `py` (Python) : Token PyO3.
+/// * `json_file_path` (&str) : Le chemin vers le fichier JSON.
+/// * `progress_callback` (Option<PyObject>) : Callback pour la progression en MB.
+/// * `total_items_callback` (Option<PyObject>) : Callback pour la taille totale en MB.
+/// * `prefix_callback` (Option<PyObject>) : Callback du préfixe.
+/// * `item_type_callback` (Option<PyObject>) : Callback du type d'élément ("MB").
+///
+/// # Returns
+/// * `PyResult<Vec<String>>` : Une liste de spectres bruts sous forme de chaînes de caractères.
 pub fn load_spectrum_list_json(
     py: Python,
     json_file_path: &str,
@@ -116,6 +142,18 @@ pub fn load_spectrum_list_json(
 // ----------------------------------------------------------------------
 // RUST NATIVE JSONL LOADER (Ligne par Ligne)
 // ----------------------------------------------------------------------
+/// RUST NATIVE JSONL LOADER (Ligne par Ligne)
+///
+/// # Arguments
+/// * `py` (Python) : Token PyO3.
+/// * `json_file_path` (&str) : Le chemin vers le fichier JSONL.
+/// * `progress_callback` (Option<PyObject>) : Callback pour la progression en MB.
+/// * `total_items_callback` (Option<PyObject>) : Callback pour la taille totale en MB.
+/// * `prefix_callback` (Option<PyObject>) : Callback du préfixe.
+/// * `item_type_callback` (Option<PyObject>) : Callback du type d'élément ("MB").
+///
+/// # Returns
+/// * `PyResult<Vec<String>>` : Une liste de spectres bruts sous forme de chaînes de caractères.
 pub fn load_spectrum_list_json_2(
     py: Python,
     json_file_path: &str,
@@ -177,6 +215,18 @@ pub fn load_spectrum_list_json_2(
 // ----------------------------------------------------------------------
 // MSP FORMAT
 // ----------------------------------------------------------------------
+/// RUST NATIVE MSP LOADER
+///
+/// # Arguments
+/// * `py` (Python) : Token PyO3.
+/// * `msp_file_path` (&str) : Le chemin vers le fichier MSP.
+/// * `progress_callback` (Option<PyObject>) : Callback pour la progression en MB.
+/// * `total_items_callback` (Option<PyObject>) : Callback pour la taille totale en MB.
+/// * `prefix_callback` (Option<PyObject>) : Callback du préfixe.
+/// * `item_type_callback` (Option<PyObject>) : Callback du type d'élément ("MB").
+///
+/// # Returns
+/// * `PyResult<Vec<String>>` : Une liste de spectres bruts sous forme de chaînes de caractères.
 pub fn load_spectrum_list_from_msp(
     py: Python,
     msp_file_path: &str,
@@ -184,7 +234,7 @@ pub fn load_spectrum_list_from_msp(
     total_items_callback: Option<PyObject>,
     prefix_callback: Option<PyObject>,
     item_type_callback: Option<PyObject>,
-) -> PyResult<Vec<String>> { 
+) -> PyResult<Vec<String>> {
     let file_hash = generate_file_hash(msp_file_path);
     let path = Path::new(msp_file_path);
     let filename = path.file_name().unwrap_or_default().to_string_lossy().to_string();
@@ -248,6 +298,18 @@ pub fn load_spectrum_list_from_msp(
 // ----------------------------------------------------------------------
 // MGF FORMAT
 // ----------------------------------------------------------------------
+/// RUST NATIVE MGF LOADER
+///
+/// # Arguments
+/// * `py` (Python) : Token PyO3.
+/// * `mgf_file_path` (&str) : Le chemin vers le fichier MGF.
+/// * `progress_callback` (Option<PyObject>) : Callback pour la progression en MB.
+/// * `total_items_callback` (Option<PyObject>) : Callback pour la taille totale en MB.
+/// * `prefix_callback` (Option<PyObject>) : Callback du préfixe.
+/// * `item_type_callback` (Option<PyObject>) : Callback du type d'élément ("MB").
+///
+/// # Returns
+/// * `PyResult<Vec<String>>` : Une liste de spectres bruts sous forme de chaînes de caractères.
 pub fn load_spectrum_list_from_mgf(
     py: Python,
     mgf_file_path: &str,

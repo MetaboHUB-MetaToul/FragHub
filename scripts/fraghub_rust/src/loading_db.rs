@@ -35,6 +35,11 @@ fn read_csv_to_dict_of_dicts(filepath: &str, sep: u8, key_col: &str) -> Result<H
     Ok(map)
 }
 
+/// Charge plusieurs fichiers CSV en parallèle.
+///
+/// Pour un développeur Python : C'est ici qu'on charge les bases de données (PubChem, Ontologies)
+/// en RAM au démarrage de FragHub. Grâce à `par_iter()`, on lit tous les fichiers CSV
+/// simultanément sur tous les cœurs du CPU.
 fn read_multiple_csvs_to_dict(folder_path: &str, sep: u8, filter_str: &str, key_col: &str) -> HashMap<String, HashMap<String, String>> {
     let mut paths = Vec::new();
     if let Ok(entries) = fs::read_dir(folder_path) {
@@ -65,6 +70,10 @@ fn read_multiple_csvs_to_dict(folder_path: &str, sep: u8, filter_str: &str, key_
     merged
 }
 
+/// Point d'entrée pour le chargement des bases de données depuis Python.
+///
+/// Pour un développeur Python : Cette fonction est appelée au démarrage de l'app Electron/Python.
+/// Elle peuple le dictionnaire `STATE` global (le cache RAM).
 #[pyfunction]
 pub fn load_internal_databases(_py: Python, base_dir: &str) -> PyResult<()> {
     let base_path = Path::new(base_dir);

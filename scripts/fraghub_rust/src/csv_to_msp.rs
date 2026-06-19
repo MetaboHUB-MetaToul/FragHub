@@ -41,6 +41,13 @@ fn get_string(spec: &Spectrum, key: &str) -> String {
     "NOT FOUND".to_string()
 }
 
+/// Convertit tous les spectres en texte (format MSP) pour l'écriture finale, en utilisant le multithreading.
+///
+/// Pour un développeur Python : Construire une énorme chaîne de texte ligne par ligne
+/// en Python (ex: `texte += "\n"` ou `''.join()`) est très coûteux.
+/// En Rust, on utilise `String::with_capacity(2048)` pour pré-allouer exactement la RAM
+/// nécessaire à un spectre, puis la macro `write!` pousse les valeurs formatées
+/// directement dans cette zone mémoire, le tout en parallèle grâce à `.par_iter()`.
 #[allow(clippy::too_many_arguments)]
 pub fn csv_to_msp_processing(
     py: Python,

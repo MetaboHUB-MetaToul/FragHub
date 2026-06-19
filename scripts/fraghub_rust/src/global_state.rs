@@ -2,6 +2,13 @@ use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::sync::RwLock;
 
+/// État global de l'application stocké en RAM.
+///
+/// Pour un développeur Python : En Python, on définirait simplement des variables globales.
+/// En Rust, les variables globales mutables sont interdites par défaut (car très dangereuses en multithreading).
+/// On utilise donc `Lazy` (initialisation au premier appel) et `RwLock` 
+/// (Read-Write Lock) pour s'assurer que plusieurs cœurs peuvent lire la RAM
+/// simultanément en toute sécurité.
 pub struct GlobalState {
     pub pubchem_datas: HashMap<String, HashMap<String, String>>,
     pub ontologies_datas: HashMap<String, HashMap<String, String>>,

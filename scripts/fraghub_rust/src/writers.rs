@@ -14,6 +14,22 @@ use std::sync::Arc;
 static RE_3: Lazy<Regex> = Lazy::new(|| Regex::new(r#"\[\n\s*(-?[\d\.eE\+\-]+),\n\s*(-?[\d\.eE\+\-]+),\n\s*"(.*?)"\n\s*\]"#).unwrap());
 static RE_2: Lazy<Regex> = Lazy::new(|| Regex::new(r#"\[\n\s*(-?[\d\.eE\+\-]+),\n\s*(-?[\d\.eE\+\-]+)\n\s*\]"#).unwrap());
 
+/// Regroupe les fonctions d'écriture hautement optimisées pour générer les fichiers MSP.
+///
+/// Pour un développeur Python : Au lieu de garder des gigaoctets de texte en RAM
+/// ou de faire des écritures uniques coûteuses, on écrit par "flux" (streams) binaires.
+/// L'objet `AtomicUsize` (ex: `global_processed`) permet à de multiples threads concurrents
+/// de mettre à jour la barre de progression simultanément, sans aucune corruption mémoire.
+///
+/// # Arguments
+/// * `py` (Python) : Token d'accès au GIL.
+/// * `pos_lc` (Vec<String>), `pos_lc_insilico`... : Les différentes listes de spectres formatés selon la polarité/chromato.
+/// * `output_directory` (&str) : Dossier cible.
+/// * `update` (bool) : Indicateur pour savoir s'il faut écraser ou ajouter (append) au fichier existant.
+/// * `progress_callback`, `total_items_callback`, `prefix_callback`, `item_type_callback` : Callbacks UI.
+///
+/// # Returns
+/// * `PyResult<()>` : Succès ou erreur IO.
 #[allow(clippy::too_many_arguments)]
 pub fn writting_msp_processing(
     py: Python, pos_lc: Vec<String>, pos_lc_insilico: Vec<String>, pos_gc: Vec<String>, pos_gc_insilico: Vec<String>, neg_lc: Vec<String>, neg_lc_insilico: Vec<String>, neg_gc: Vec<String>, neg_gc_insilico: Vec<String>, output_directory: &str, update: bool, progress_callback: Option<PyObject>, total_items_callback: Option<PyObject>, prefix_callback: Option<PyObject>, item_type_callback: Option<PyObject>,
@@ -84,6 +100,18 @@ pub fn writting_msp_processing(
     Ok(())
 }
 
+/// Regroupe les fonctions d'écriture hautement optimisées pour générer les fichiers CSV.
+///
+/// # Arguments
+/// * `py` (Python) : Token d'accès au GIL.
+/// * `pos_lc_df` (Vec<Spectrum>), `pos_gc_df`... : Les différentes listes de spectres formatés.
+/// * `ordered_columns` (Vec<String>) : Liste ordonnée des colonnes du CSV.
+/// * `output_directory` (&str) : Dossier cible.
+/// * `update` (bool) : Indicateur pour savoir s'il faut écraser ou ajouter (append) au fichier existant.
+/// * `progress_callback`, `total_items_callback`, `prefix_callback`, `item_type_callback` : Callbacks UI.
+///
+/// # Returns
+/// * `PyResult<()>` : Succès ou erreur IO.
 #[allow(clippy::too_many_arguments)]
 pub fn writting_csv_processing(
     py: Python, pos_lc_df: Vec<Spectrum>, pos_gc_df: Vec<Spectrum>, neg_lc_df: Vec<Spectrum>, neg_gc_df: Vec<Spectrum>, pos_lc_df_insilico: Vec<Spectrum>, pos_gc_df_insilico: Vec<Spectrum>, neg_lc_df_insilico: Vec<Spectrum>, neg_gc_df_insilico: Vec<Spectrum>, ordered_columns: Vec<String>, output_directory: &str, update: bool, progress_callback: Option<PyObject>, total_items_callback: Option<PyObject>, prefix_callback: Option<PyObject>, item_type_callback: Option<PyObject>,
@@ -193,6 +221,17 @@ pub fn writting_csv_processing(
     Ok(())
 }
 
+/// Regroupe les fonctions d'écriture hautement optimisées pour générer les fichiers JSON.
+///
+/// # Arguments
+/// * `py` (Python) : Token d'accès au GIL.
+/// * `update` (bool) : Indicateur pour savoir s'il faut écraser ou ajouter (append) au fichier existant.
+/// * `pos_lc_df` (Vec<Spectrum>), `pos_gc_df`... : Les différentes listes de spectres formatés.
+/// * `output_directory` (&str) : Dossier cible.
+/// * `progress_callback`, `total_items_callback`, `prefix_callback`, `item_type_callback` : Callbacks UI.
+///
+/// # Returns
+/// * `PyResult<()>` : Succès ou erreur IO.
 #[allow(clippy::too_many_arguments)]
 pub fn writting_json_processing(
     py: Python, update: bool, pos_lc_df: Vec<Spectrum>, pos_gc_df: Vec<Spectrum>, neg_lc_df: Vec<Spectrum>, neg_gc_df: Vec<Spectrum>, pos_lc_df_insilico: Vec<Spectrum>, pos_gc_df_insilico: Vec<Spectrum>, neg_lc_df_insilico: Vec<Spectrum>, neg_gc_df_insilico: Vec<Spectrum>, output_directory: &str, progress_callback: Option<PyObject>, total_items_callback: Option<PyObject>, prefix_callback: Option<PyObject>, item_type_callback: Option<PyObject>,

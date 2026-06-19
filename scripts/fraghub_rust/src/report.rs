@@ -26,6 +26,11 @@ fn get_df_stats(list: &Vec<Spectrum>) -> PyResult<(usize, usize)> {
 }
 
 
+/// Génère le rapport final (report.txt) récapitulant les paramètres et le résultat du nettoyage.
+///
+/// Pour un développeur Python : Ce fichier contient le formatage d'une très longue chaîne.
+/// En Rust, on utilise `format!(r#"..."#)` pour manipuler du texte brut multi-lignes ("raw strings") 
+/// sans avoir besoin d'échapper les guillemets ou caractères spéciaux.
 pub fn generate_report_processing(
     _py: Python,
     output_directory: String,

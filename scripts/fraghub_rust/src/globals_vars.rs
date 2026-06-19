@@ -3,6 +3,13 @@
 use once_cell::sync::Lazy;
 use regex::Regex;
 
+/// Expressions régulières compilées une seule fois pour tout le programme.
+///
+/// Pour un développeur Python : Si vous utilisez `re.match()` ou compilez une regex à l'intérieur
+/// d'une boucle Python, cela ralentit tout. Ici, on utilise `Lazy` pour compiler chaque Regex 
+/// au tout premier appel, puis on les garde en RAM. C'est l'un des secrets des 
+/// performances exceptionnelles de ce parseur natif.
+
 // =================================================== REGEX PATTERN ====================================================
 
 // ============ Parsors regex ============

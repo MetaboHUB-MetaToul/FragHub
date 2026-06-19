@@ -4,8 +4,10 @@ use std::fs::{self, File};
 use std::io::Write;
 use std::path::Path;
 
-// Fonction utilitaire équivalente à remove_files en Python
-// Vide le contenu du dossier récursivement, beaucoup plus vite qu'en Python.
+/// Fonction utilitaire équivalente à `shutil.rmtree` en Python.
+///
+/// Pour un développeur Python : Vide le contenu du dossier récursivement.
+/// C'est beaucoup plus rapide qu'en Python car on fait appel directement aux API bas niveau de l'OS.
 fn remove_files_rust(dir: &Path) -> std::io::Result<()> {
     if dir.is_dir() {
         for entry in fs::read_dir(dir)? {

@@ -9,6 +9,17 @@ use std::io::{BufRead, BufReader};
 use crate::convertors::loaders::generate_file_hash;
 
 // 1. Détection du séparateur (comme dans votre Python)
+/// Détecte si le fichier CSV utilise des tabulations (\t) ou des points-virgules (;).
+///
+/// Pour un développeur Python : L'utilisation de `File::open` renvoie un `Result`. 
+/// `if let Ok(file)` permet d'ouvrir le fichier seulement si tout s'est bien passé,
+/// sinon on passe à la suite sans faire planter le programme avec une exception.
+///
+/// # Arguments
+/// * `file_path` (&str) : Le chemin vers le fichier CSV.
+///
+/// # Returns
+/// * `u8` : L'octet correspondant au séparateur (`b'\t'` ou `b';'`).
 fn detect_separator(file_path: &str) -> u8 {
     if let Ok(file) = File::open(file_path) {
         let mut reader = BufReader::new(file);
@@ -17,7 +28,7 @@ fn detect_separator(file_path: &str) -> u8 {
             let tab_count = first_line.matches('\t').count();
             let semi_count = first_line.matches(';').count();
             if tab_count > semi_count {
-                return b'\t';
+                return b'\t'; // `b'\t'` est un octet (byte), pas un caractère (char).
             }
         }
     }
@@ -25,6 +36,18 @@ fn detect_separator(file_path: &str) -> u8 {
 }
 
 // 2. Parsing exact des pics selon VOTRE logique regex
+/// Parse la colonne des pics (sous forme de chaîne JSON) en un Vecteur de tuples (m/z, intensité).
+/// 
+/// Pour un développeur Python : La boucle parcourt les résultats d'une regex.
+/// Le `if let (Ok(mz), Ok(intensity))` vérifie simultanément que la masse et l'intensité 
+/// peuvent bien être converties de `str` à `float` (`f64`). Si une valeur échoue (ex: texte malformé),
+/// le point de donnée est ignoré silencieusement.
+///
+/// # Arguments
+/// * `peak_list_string` (&str) : La chaîne de caractères brute de la liste des pics.
+///
+/// # Returns
+/// * `Vec<(f64, f64)>` : La liste des tuples `(m/z, intensité)`.
 fn parse_peak_list_native(peak_list_string: &str) -> Vec<(f64, f64)> {
     let mut peaks = Vec::new();
     for cap in crate::globals_vars::PEAK_LIST_JSON_PATTERN.captures_iter(peak_list_string) {
@@ -38,6 +61,24 @@ fn parse_peak_list_native(peak_list_string: &str) -> Vec<(f64, f64)> {
 }
 
 // 3. La fonction principale qui remplace Pandas et csv_to_dict_processing
+/// La fonction principale qui remplace l'utilisation de Pandas et `csv_to_dict_processing` de Python.
+///
+/// Pour un développeur Python : Cette fonction est appelée directement depuis Python (grâce à `PyResult`).
+/// `py: Python` est un jeton ("token") prouvant que Rust possède le GIL Python. 
+/// Il permet d'appeler de façon sécurisée les callbacks Python (pour la barre de progression).
+///
+/// # Arguments
+/// * `py` (Python) : Le token PyO3.
+/// * `csv_files` (Vec<String>) : Liste des chemins vers les fichiers CSV.
+/// * `keys_dict` (HashMap<String, String>) : Dictionnaire de mapping des clés.
+/// * `keys_list` (Vec<String>) : Liste des clés officielles à conserver.
+/// * `progress_callback` (Option<PyObject>) : Callback pour la progression.
+/// * `total_items_callback` (Option<PyObject>) : Callback pour le total.
+/// * `prefix_callback` (Option<PyObject>) : Callback pour le préfixe.
+/// * `item_type_callback` (Option<PyObject>) : Callback pour le type d'élément.
+///
+/// # Returns
+/// * `PyResult<Vec<Spectrum>>` : La liste consolidée de tous les spectres parsés.
 pub fn load_and_parse_csv(
     py: Python,
     csv_files: Vec<String>,

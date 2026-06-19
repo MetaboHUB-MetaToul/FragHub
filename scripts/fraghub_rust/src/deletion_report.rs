@@ -1,5 +1,11 @@
 // src/deletion_report.rs
 
+/// Structure permettant de compter les raisons de suppression des spectres invalides.
+///
+/// Pour un développeur Python : Au lieu de trimballer un dictionnaire pour les compteurs
+/// (ce qui obligerait à hasher des clés à chaque incrémentation, ralentissant le programme),
+/// on définit une structure fortement typée avec des compteurs de type `usize` (entiers positifs liés à l'architecture).
+/// `Default` permet d'initialiser tous ces compteurs à zéro automatiquement lors de la création.
 #[derive(Clone, Default, Debug)]
 pub struct DeletionReport {
     pub duplicatas_removed: usize,

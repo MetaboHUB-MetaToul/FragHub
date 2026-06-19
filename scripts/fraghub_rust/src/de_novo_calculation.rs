@@ -276,6 +276,12 @@ fn process_spectrum_peaks(formula: &str, peaks_list_str: &str, ppm_tol: f64) -> 
     new_peaks_list
 }
 
+/// Calcule et attribue les formules chimiques aux fragments (algorithme de-novo).
+///
+/// Pour un développeur Python : C'est la fonction la plus complexe mathématiquement (Backtracking/Combinaisons).
+/// L'implémentation Rust émule parfaitement l'algorithme "Numba" utilisé côté Python,
+/// mais sans le fameux GIL (Global Interpreter Lock). En utilisant `par_iter_mut()`,
+/// la charge colossale du calcul "De Novo" est répartie sur tous les cœurs du processeur Mac.
 pub fn de_novo_calculation_processing(
     py: Python,
     mut spectrum_list: Vec<Spectrum>,
