@@ -25,7 +25,7 @@ pub mod ontologies_completion;
 pub mod de_novo_calculation;
 pub mod normalize_to_not_found;
 pub mod splitter;
-pub mod csv_to_msp;
+pub mod spectra_to_msp;
 pub mod writers;
 pub mod report;
 pub mod set_projects;

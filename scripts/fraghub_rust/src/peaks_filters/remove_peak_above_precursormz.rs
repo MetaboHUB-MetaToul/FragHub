@@ -18,7 +18,7 @@ pub fn remove_peak_above_precursormz(
     precursormz: f64,
     deletion_reason: &mut Option<String>
 ) -> Vec<(f64, f64)> {
-    let limit = precursormz - 5.0; // En Rust, le typage est strict, on écrit 5.0 (float) et non 5 (integer).
+    let limit = precursormz + 5.0; // En Rust, le typage est strict, on écrit 5.0 (float) et non 5 (integer).
     
     // `.retain()` garde uniquement les éléments pour lesquels la closure (fonction anonyme) renvoie `true`.
     // Le `&` dans `|&(mz, _)|` sert à déstructurer la référence vers le tuple sans la consommer.

@@ -58,7 +58,6 @@ def init_project(output_directory):
 
     # Define paths for control files
     updates_file_path = os.path.join(output_directory, "updates.json")
-    fraghub_file_path = os.path.join(output_directory, ".fraghub")
 
     # Define required directory structure
     main_directories = ['CSV', 'JSON', 'MSP']
@@ -72,11 +71,6 @@ def init_project(output_directory):
     if not os.path.isfile(updates_file_path):
         with open(updates_file_path, 'w') as fp:
             json.dump({}, fp)
-
-    # Create an empty '.fraghub' project file if it does not exist
-    if not os.path.isfile(fraghub_file_path):
-        with open(fraghub_file_path, 'w') as fp:
-            pass
 
     # Create the main and subdirectories (e.g., CSV/NEG, JSON/POS)
     for main_dir in main_directories:

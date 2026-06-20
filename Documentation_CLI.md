@@ -93,7 +93,7 @@ FragHub uses standard `yes` or `no` arguments for enabling/disabling filters and
 ### Entropy Score Filtering
 | Argument | Default | Description |
 | :--- | :--- | :--- |
-| `--remove_spectrum_under_entropy_score` | `yes` | Enable spectrum deletion based on its calculated entropy. |
+| `--remove_spectrum_under_entropy_score` | `yes` | Enable spectrum deletion based on its calculated Shannon entropy. |
 | `--remove_spectrum_under_entropy_score_value` | `0.5` | Threshold below which the spectrum will be deleted. |
 
 ### M/Z Range Filtering

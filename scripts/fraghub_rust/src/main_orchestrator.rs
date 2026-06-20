@@ -18,7 +18,7 @@ use crate::normalize_to_not_found::normalize_to_not_found_processing;
 
 use crate::splitter::master_splitter;
 
-use crate::csv_to_msp::csv_to_msp_processing;
+use crate::spectra_to_msp::spectra_to_msp_processing;
 use crate::writers::{writting_csv_processing, writting_msp_processing, writting_json_processing};
 use crate::report::generate_report_processing;
 use crate::set_projects::{init_project, reset_updates};
@@ -317,7 +317,7 @@ pub fn main_orchestrator(
             if let Some(cb) = &step_callback { cb.call1(py, ("--  CONVERTING CSV TO MSP --",))?; }
             py.allow_threads(|| { std::thread::sleep(std::time::Duration::from_millis(10)); });
 
-            let tuple_msp = csv_to_msp_processing(py, pos_lc_df.clone(), pos_lc_in_silico_df.clone(), pos_gc_df.clone(), pos_gc_in_silico_df.clone(), neg_lc_df.clone(), neg_lc_in_silico_df.clone(), neg_gc_df.clone(), neg_gc_in_silico_df.clone(), progress_callback.clone(), total_items_callback.clone(), prefix_callback.clone(), item_type_callback.clone())?;
+            let tuple_msp = spectra_to_msp_processing(py, pos_lc_df.clone(), pos_lc_in_silico_df.clone(), pos_gc_df.clone(), pos_gc_in_silico_df.clone(), neg_lc_df.clone(), neg_lc_in_silico_df.clone(), neg_gc_df.clone(), neg_gc_in_silico_df.clone(), progress_callback.clone(), total_items_callback.clone(), prefix_callback.clone(), item_type_callback.clone())?;
             pos_lc_msp = tuple_msp.0;
             pos_lc_insilico_msp = tuple_msp.1;
             pos_gc_msp = tuple_msp.2;

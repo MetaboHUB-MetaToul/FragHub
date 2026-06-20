@@ -59,12 +59,6 @@ pub fn init_project(output_directory: String) -> PyResult<()> {
         }
     }
 
-    // 3. Créer .fraghub (vide)
-    let fraghub_file_path = out_path.join(".fraghub");
-    if !fraghub_file_path.exists() {
-        let _ = File::create(&fraghub_file_path);
-    }
-
     // 4. Créer l'arborescence (CSV, JSON, MSP) x (NEG, POS)
     let main_directories = ["CSV", "JSON", "MSP"];
     let sub_directories = ["NEG", "POS"];

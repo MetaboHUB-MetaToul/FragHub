@@ -1,4 +1,4 @@
-// src/csv_to_msp.rs
+// src/spectra_to_msp
 use pyo3::prelude::*;
 use rayon::prelude::*;
 use crate::spectrum::Spectrum;
@@ -49,7 +49,7 @@ fn get_string(spec: &Spectrum, key: &str) -> String {
 /// nécessaire à un spectre, puis la macro `write!` pousse les valeurs formatées
 /// directement dans cette zone mémoire, le tout en parallèle grâce à `.par_iter()`.
 #[allow(clippy::too_many_arguments)]
-pub fn csv_to_msp_processing(
+pub fn spectra_to_msp_processing(
     py: Python,
     pos_lc_df: Vec<Spectrum>,
     pos_lc_df_insilico: Vec<Spectrum>,
