@@ -5,69 +5,43 @@ use std::fs;
 use csv::ReaderBuilder;
 use std::path::Path;
 use crate::global_state::STATE;
+use polars::prelude::*;
 
-fn read_csv_to_dict_of_dicts(filepath: &str, sep: u8, key_col: &str) -> Result<HashMap<String, HashMap<String, String>>, Box<dyn std::error::Error + Send + Sync>> {
-    let mut rdr = ReaderBuilder::new()
-        .delimiter(sep)
-        .quote(b'"')
-        .from_path(filepath)?;
-
-    let headers: Vec<String> = rdr.headers()?.iter().map(|s| s.to_string()).collect();
+fn read_parquet_to_dict_of_dicts(filepath: &str, key_col: &str) -> HashMap<String, HashMap<String, String>> {
     let mut map = HashMap::new();
-
-    let key_idx = headers.iter().position(|h| h == key_col);
-    if key_idx.is_none() {
-        return Ok(map);
-    }
-    let key_idx = key_idx.unwrap();
-
-    for result in rdr.records() {
-        if let Ok(record) = result {
-            if let Some(key_val) = record.get(key_idx) {
+    
+    if let Ok(mut file) = fs::File::open(filepath) {
+        if let Ok(df) = ParquetReader::new(&mut file).finish() {
+            let headers: Vec<String> = df.get_column_names().iter().map(|s| s.to_string()).collect();
+            let n_rows = df.height();
+            let columns = df.get_columns();
+            
+            for i in 0..n_rows {
                 let mut row_dict = HashMap::new();
-                for (i, val) in record.iter().enumerate() {
-                    row_dict.insert(headers[i].clone(), val.to_string());
-                }
-                map.insert(key_val.to_string(), row_dict);
-            }
-        }
-    }
-    Ok(map)
-}
-
-/// Charge plusieurs fichiers CSV en parallèle.
-///
-/// Pour un développeur Python : C'est ici qu'on charge les bases de données (PubChem, Ontologies)
-/// en RAM au démarrage de FragHub. Grâce à `par_iter()`, on lit tous les fichiers CSV
-/// simultanément sur tous les cœurs du CPU.
-fn read_multiple_csvs_to_dict(folder_path: &str, sep: u8, filter_str: &str, key_col: &str) -> HashMap<String, HashMap<String, String>> {
-    let mut paths = Vec::new();
-    if let Ok(entries) = fs::read_dir(folder_path) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_file() {
-                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                    if name.ends_with(".csv") && (filter_str.is_empty() || name.contains(filter_str)) {
-                        paths.push(path.to_string_lossy().to_string());
+                let mut key_val = String::new();
+                
+                for (col_idx, header) in headers.iter().enumerate() {
+                    if let Ok(val) = columns[col_idx].get(i) {
+                        let val_clean = match val {
+                            AnyValue::String(s) => s.to_string(),
+                            AnyValue::StringOwned(s) => s.to_string(),
+                            AnyValue::Null => "".to_string(),
+                            _ => val.to_string(),
+                        };
+                        if header == key_col {
+                            key_val = val_clean.clone();
+                        }
+                        row_dict.insert(header.clone(), val_clean);
                     }
                 }
+                
+                if !key_val.is_empty() {
+                    map.insert(key_val, row_dict);
+                }
             }
         }
     }
-
-    let results: Vec<_> = paths.par_iter().map(|p| {
-        read_csv_to_dict_of_dicts(p, sep, key_col)
-    }).collect();
-
-    let mut merged: HashMap<String, HashMap<String, String>> = HashMap::new();
-    for res in results {
-        if let Ok(map) = res {
-            for (k, v) in map {
-                merged.insert(k, v);
-            }
-        }
-    }
-    merged
+    map
 }
 
 /// Point d'entrée pour le chargement des bases de données depuis Python.
@@ -78,13 +52,12 @@ fn read_multiple_csvs_to_dict(folder_path: &str, sep: u8, filter_str: &str, key_
 pub fn load_internal_databases(_py: Python, base_dir: &str) -> PyResult<()> {
     let base_path = Path::new(base_dir);
 
-    // 1. Pubchem
-    let pubchem_path = base_path.join("datas").join("pubchem_datas");
-    let pubchem_datas = read_multiple_csvs_to_dict(&pubchem_path.to_string_lossy(), b';', "pubchem_rdkit_clean_part", "INCHIKEY");
+    // 1. Pubchem (Désormais fusionné dans ontologies_datas, on le laisse vide pour économiser la RAM)
+    let pubchem_datas = HashMap::new();
 
-    // 2. Ontologies
-    let ontologies_path = base_path.join("datas").join("ontologies_datas");
-    let ontologies_datas = read_multiple_csvs_to_dict(&ontologies_path.to_string_lossy(), b';', "ontologies_dict", "INCHIKEY");
+    // 2. Ontologies (Contient désormais TOUTES les données PubChem + NPClassifier + ClassyFire au format Parquet)
+    let ontologies_parquet_path = base_path.join("datas").join("internal_databases.parquet");
+    let ontologies_datas = read_parquet_to_dict_of_dicts(&ontologies_parquet_path.to_string_lossy(), "INCHIKEY");
 
     // 3. Adducts
     let adduct_file_path = base_path.join("datas").join("adduct_to_convert.csv");

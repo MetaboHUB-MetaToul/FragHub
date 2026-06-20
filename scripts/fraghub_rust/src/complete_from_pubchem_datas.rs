@@ -24,9 +24,9 @@ pub fn complete_from_pubchem_datas(
     let total_items = spectrum_list.len();
     if let Some(cb) = &total_items_callback { cb.call1(py, (total_items, 0))?; }
 
-    // --- Step 2: Récupération de pubchem_datas depuis Rust Global State ---
+    // --- Step 2: Récupération de ontologies_datas (qui contient désormais pubchem) depuis Rust Global State ---
     let state = crate::global_state::STATE.read().unwrap();
-    let pubchem_dict = &state.pubchem_datas;
+    let pubchem_dict = &state.ontologies_datas;
 
     let columns_to_update = ["INCHI", "SMILES", "FORMULA", "NAME", "EXACTMASS", "AVERAGEMASS"];
     let mut processed = 0;
