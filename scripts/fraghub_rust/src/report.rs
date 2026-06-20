@@ -225,9 +225,11 @@ pub fn generate_report_processing(
 
     let mut cf_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     let mut np_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    let mut inst_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
 
     let root_cf = "ClassyFire";
     let root_np = "NPClassifier";
+    let root_inst = "Instrument";
 
     cf_counts.insert(root_cf.to_string(), 0);
     np_counts.insert(root_np.to_string(), 0);
@@ -293,6 +295,18 @@ pub fn generate_report_processing(
         *np_counts.entry(n1).or_insert(0) += 1;
         *np_counts.entry(n2).or_insert(0) += 1;
         *np_counts.entry(n3).or_insert(0) += 1;
+
+        let instrument_full = clean_str(spec.metadata.get("INSTRUMENT").map(|s| s.as_str()).unwrap_or("Unknown"));
+        let parts: Vec<&str> = instrument_full.split_whitespace().collect();
+        let brand = if parts.is_empty() { "Unknown".to_string() } else { parts[0].to_string() };
+        let model = if parts.len() > 1 { parts[1..].join(" ") } else { "Unknown".to_string() };
+
+        let p1_inst = format!("{}|{}", root_inst, brand);
+        let p2_inst = format!("{}|{}", p1_inst, model);
+
+        *inst_counts.entry(root_inst.to_string()).or_insert(0) += 1;
+        *inst_counts.entry(p1_inst).or_insert(0) += 1;
+        *inst_counts.entry(p2_inst).or_insert(0) += 1;
     }
 
     let mut cf_ids_list = Vec::new();
@@ -321,6 +335,27 @@ pub fn generate_report_processing(
         np_values_list.push(*val);
     }
 
+    let mut inst_ids = Vec::new();
+    let mut inst_labels = Vec::new();
+    let mut inst_parents = Vec::new();
+    let mut inst_values = Vec::new();
+
+    for (id, val) in &inst_counts {
+        if *val == 0 { continue; }
+        inst_ids.push(id.clone());
+        inst_values.push(*val);
+        
+        if id == root_inst {
+            inst_labels.push(root_inst.to_string());
+            inst_parents.push("".to_string());
+        } else {
+            let parts: Vec<&str> = id.split('|').collect();
+            inst_labels.push(parts.last().unwrap().to_string());
+            let parent_id = parts[..parts.len() - 1].join("|");
+            inst_parents.push(parent_id);
+        }
+    }
+
     let cf_labels_json = serde_json::to_string(&cf_labels_list).unwrap_or_else(|_| "[]".to_string());
     let cf_parents_json = serde_json::to_string(&cf_parents_list).unwrap_or_else(|_| "[]".to_string());
     let cf_values_json = serde_json::to_string(&cf_values_list).unwrap_or_else(|_| "[]".to_string());
@@ -341,6 +376,15 @@ pub fn generate_report_processing(
     html = html.replace("{NP_VALUES}", &np_values_json);
     html = html.replace("{NP_IDS}", &np_ids_json);
 
+    let inst_labels_json = serde_json::to_string(&inst_labels).unwrap_or_else(|_| "[]".to_string());
+    let inst_parents_json = serde_json::to_string(&inst_parents).unwrap_or_else(|_| "[]".to_string());
+    let inst_values_json = serde_json::to_string(&inst_values).unwrap_or_else(|_| "[]".to_string());
+    let inst_ids_json = serde_json::to_string(&inst_ids).unwrap_or_else(|_| "[]".to_string());
+
+    html = html.replace("{INST_LABELS}", &inst_labels_json);
+    html = html.replace("{INST_PARENTS}", &inst_parents_json);
+    html = html.replace("{INST_VALUES}", &inst_values_json);
+    html = html.replace("{INST_IDS}", &inst_ids_json);
     
     
     

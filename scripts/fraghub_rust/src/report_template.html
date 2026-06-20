@@ -305,7 +305,7 @@
                 </div>
             </div>
 
-<div class="card" style="margin-top: 1.5rem; margin-bottom: 2rem;">
+        <div class="card" style="margin-top: 1.5rem; margin-bottom: 2rem;">
             <h2>Files Intersections (UpSet Plot)</h2>
             <div style="border: 1px solid var(--border); border-radius: 6px; padding: 1rem; background: var(--bg); display: flex; justify-content: center; overflow-x: auto;">
                 <div id="upset-chart" style="width: 100%; min-height: 500px;"></div>
@@ -313,11 +313,98 @@
             <p style="text-align: center; font-size: 0.8rem; color: #94a3b8; margin-top: 1rem;">Shows the number of unique spectra intersecting between files.</p>
         </div>
         
-            <p style="text-align: center; font-size: 0.8rem; color: #94a3b8; margin-top: 1rem;">Note: Interactive charts require an internet connection to load the Plotly.js library.</p>
+            <div class="card" style="margin-top: 1.5rem; margin-bottom: 2rem;">
+            <h2>Instrument Distribution</h2>
+            <div style="border: 1px solid var(--border); border-radius: 6px; padding: 1rem; background: var(--bg); display: flex; justify-content: center;">
+                <div id="instrument-chart" style="width: 100%; max-width: 800px; height: 500px;"></div>
+            </div>
+        </div>
+        <p style="text-align: center; font-size: 0.8rem; color: #94a3b8; margin-top: 1rem;">Note: Interactive charts require an internet connection to load the Plotly.js library.</p>
         </div>
     </div>
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
             <script>
+                var inst_labels = {INST_LABELS};
+        var inst_parents = {INST_PARENTS};
+        var inst_values = {INST_VALUES};
+        var inst_ids = {INST_IDS};
+
+        if (inst_labels && inst_labels.length > 0) {
+            var nodeMap = {};
+            for (var i = 0; i < inst_ids.length; i++) {
+                nodeMap[inst_ids[i]] = {
+                    name: inst_labels[i] + '\n(' + inst_values[i] + ')',
+                    value: inst_values[i],
+                    children: [],
+                    itemStyle: {
+                        color: (inst_labels[i].toUpperCase() === "NOT FOUND" || inst_labels[i].toUpperCase() === "UNKNOWN") ? '#ef4444' : '#0ea5e9',
+                        borderColor: (inst_labels[i].toUpperCase() === "NOT FOUND" || inst_labels[i].toUpperCase() === "UNKNOWN") ? '#b91c1c' : '#0284c7'
+                    }
+                };
+            }
+            
+            var treeData = [];
+            for (var i = 0; i < inst_ids.length; i++) {
+                var parentId = inst_parents[i];
+                if (parentId && nodeMap[parentId]) {
+                    nodeMap[parentId].children.push(nodeMap[inst_ids[i]]);
+                } else {
+                    treeData.push(nodeMap[inst_ids[i]]);
+                }
+            }
+
+            var chartDom = document.getElementById('instrument-chart');
+            var myChart = echarts.init(chartDom);
+            var option = {
+                tooltip: {
+                    trigger: 'item',
+                    triggerOn: 'mousemove',
+                    formatter: function (info) {
+                        return info.name.replace('\n', ' ');
+                    }
+                },
+                series: [
+                    {
+                        type: 'tree',
+                        data: treeData,
+                        top: '1%',
+                        left: '7%',
+                        bottom: '1%',
+                        right: '20%',
+                        symbolSize: function(val, params) {
+                            var baseSize = 10;
+                            if (params.data.value) {
+                                baseSize = Math.max(10, Math.min(40, Math.log10(params.data.value) * 10));
+                            }
+                            return baseSize;
+                        },
+                        label: {
+                            position: 'left',
+                            verticalAlign: 'middle',
+                            align: 'right',
+                            fontSize: 12,
+                            fontFamily: 'Inter, sans-serif'
+                        },
+                        leaves: {
+                            label: {
+                                position: 'right',
+                                verticalAlign: 'middle',
+                                align: 'left'
+                            }
+                        },
+                        expandAndCollapse: true,
+                        animationDuration: 550,
+                        animationDurationUpdate: 750
+                    }
+                ]
+            };
+            myChart.setOption(option);
+            window.addEventListener('resize', function() {
+                myChart.resize();
+            });
+        }
+
         var upset_data = {UPSET_DATA};
         if (upset_data && upset_data.length > 0) {
             upset_data.sort(function(a, b) { return b.count - a.count; });
