@@ -101,14 +101,24 @@ pub fn normalize_instruments_and_resolution(mut metadata_dict: HashMap<String, S
     let infos = format!(". {} .", instrument_infos);
 
     let mut current_level = &context.instrument_tree;
+    let mut tree_levels = Vec::new();
 
     // On descend les 5 niveaux (Marque, Modèle, Type Spectre, Type Instrument, Ionisation)
     for _ in 0..5 {
-        if let Some((_key, next)) = search_level(current_level, &infos) {
+        if let Some((key, next)) = search_level(current_level, &infos) {
+            tree_levels.push(key.clone());
             current_level = next;
         } else {
             return metadata_dict; // Si on ne trouve pas, on arrête et on renvoie le dico intact
         }
+    }
+
+    if tree_levels.len() == 5 {
+        metadata_dict.insert("TREE_MARQUE".to_string(), tree_levels[0].clone());
+        metadata_dict.insert("TREE_MODELE".to_string(), tree_levels[1].clone());
+        metadata_dict.insert("TREE_SPECTYPE".to_string(), tree_levels[2].clone());
+        metadata_dict.insert("TREE_INSTYPE".to_string(), tree_levels[3].clone());
+        metadata_dict.insert("TREE_IONI".to_string(), tree_levels[4].clone());
     }
 
     // Niveau 6 : Résolution

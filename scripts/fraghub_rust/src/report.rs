@@ -31,6 +31,22 @@ fn get_df_stats(list: &Vec<Spectrum>) -> PyResult<(usize, usize)> {
 /// Pour un développeur Python : Ce fichier contient le formatage d'une très longue chaîne.
 /// En Rust, on utilise `format!(r#"..."#)` pour manipuler du texte brut multi-lignes ("raw strings") 
 /// sans avoir besoin d'échapper les guillemets ou caractères spéciaux.
+fn capitalize_words(s: &str) -> String {
+    if s.to_uppercase() == "NOT FOUND" || s.to_uppercase() == "UNKNOWN" {
+        return "NOT FOUND".to_string();
+    }
+    s.split_whitespace()
+     .map(|word| {
+         let mut c = word.chars();
+         match c.next() {
+             None => String::new(),
+             Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+         }
+     })
+     .collect::<Vec<String>>()
+     .join(" ")
+}
+
 pub fn generate_report_processing(
     _py: Python,
     output_directory: String,
@@ -296,17 +312,24 @@ pub fn generate_report_processing(
         *np_counts.entry(n2).or_insert(0) += 1;
         *np_counts.entry(n3).or_insert(0) += 1;
 
-        let instrument_full = clean_str(spec.metadata.get("INSTRUMENT").map(|s| s.as_str()).unwrap_or("Unknown"));
-        let parts: Vec<&str> = instrument_full.split_whitespace().collect();
-        let brand = if parts.is_empty() { "Unknown".to_string() } else { parts[0].to_string() };
-        let model = if parts.len() > 1 { parts[1..].join(" ") } else { "Unknown".to_string() };
+        let t_marque = capitalize_words(spec.metadata.get("TREE_MARQUE").map(|s| s.as_str()).unwrap_or("NOT FOUND"));
+        let t_modele = capitalize_words(spec.metadata.get("TREE_MODELE").map(|s| s.as_str()).unwrap_or("NOT FOUND"));
+        let t_spec = capitalize_words(spec.metadata.get("TREE_SPECTYPE").map(|s| s.as_str()).unwrap_or("NOT FOUND"));
+        let t_inst = capitalize_words(spec.metadata.get("TREE_INSTYPE").map(|s| s.as_str()).unwrap_or("NOT FOUND"));
+        let t_ioni = capitalize_words(spec.metadata.get("TREE_IONI").map(|s| s.as_str()).unwrap_or("NOT FOUND"));
 
-        let p1_inst = format!("{}|{}", root_inst, brand);
-        let p2_inst = format!("{}|{}", p1_inst, model);
+        let p1_inst = format!("{}|{}", root_inst, t_marque);
+        let p2_inst = format!("{}|{}", p1_inst, t_modele);
+        let p3_inst = format!("{}|{}", p2_inst, t_spec);
+        let p4_inst = format!("{}|{}", p3_inst, t_inst);
+        let p5_inst = format!("{}|{}", p4_inst, t_ioni);
 
         *inst_counts.entry(root_inst.to_string()).or_insert(0) += 1;
         *inst_counts.entry(p1_inst).or_insert(0) += 1;
         *inst_counts.entry(p2_inst).or_insert(0) += 1;
+        *inst_counts.entry(p3_inst).or_insert(0) += 1;
+        *inst_counts.entry(p4_inst).or_insert(0) += 1;
+        *inst_counts.entry(p5_inst).or_insert(0) += 1;
     }
 
     let mut cf_ids_list = Vec::new();
