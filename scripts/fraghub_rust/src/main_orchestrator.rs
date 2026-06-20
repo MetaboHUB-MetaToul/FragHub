@@ -113,10 +113,10 @@ pub fn main_orchestrator(
     if let Some(cb) = &step_callback { cb.call1(py, ("-- GENERATING SPLASH UNIQUE ID --",))?; }
     py.allow_threads(|| { std::thread::sleep(std::time::Duration::from_millis(10)); });
 
-    let final_msp = if !final_msp.is_empty() { generate_splash_processing(py, final_msp.clone(), "MSP".to_string(), progress_callback.clone(), total_items_callback.clone(), prefix_callback.clone(), item_type_callback.clone())? } else { final_msp.clone() };
-    let final_csv = if !final_csv.is_empty() { generate_splash_processing(py, final_csv.clone(), "CSV".to_string(), progress_callback.clone(), total_items_callback.clone(), prefix_callback.clone(), item_type_callback.clone())? } else { final_csv.clone() };
-    let final_json = if !final_json.is_empty() { generate_splash_processing(py, final_json.clone(), "JSON".to_string(), progress_callback.clone(), total_items_callback.clone(), prefix_callback.clone(), item_type_callback.clone())? } else { final_json.clone() };
-    let final_mgf = if !final_mgf.is_empty() { generate_splash_processing(py, final_mgf.clone(), "MGF".to_string(), progress_callback.clone(), total_items_callback.clone(), prefix_callback.clone(), item_type_callback.clone())? } else { final_mgf.clone() };
+    let final_msp = if !final_msp.is_empty() { generate_splash_processing(py, final_msp, "MSP".to_string(), progress_callback.clone(), total_items_callback.clone(), prefix_callback.clone(), item_type_callback.clone())? } else { final_msp };
+    let final_csv = if !final_csv.is_empty() { generate_splash_processing(py, final_csv, "CSV".to_string(), progress_callback.clone(), total_items_callback.clone(), prefix_callback.clone(), item_type_callback.clone())? } else { final_csv };
+    let final_json = if !final_json.is_empty() { generate_splash_processing(py, final_json, "JSON".to_string(), progress_callback.clone(), total_items_callback.clone(), prefix_callback.clone(), item_type_callback.clone())? } else { final_json };
+    let final_mgf = if !final_mgf.is_empty() { generate_splash_processing(py, final_mgf, "MGF".to_string(), progress_callback.clone(), total_items_callback.clone(), prefix_callback.clone(), item_type_callback.clone())? } else { final_mgf };
     check_stop_flag()?;
 
     py.allow_threads(|| { std::thread::sleep(std::time::Duration::from_millis(100)); });

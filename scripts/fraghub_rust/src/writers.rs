@@ -137,6 +137,7 @@ pub fn writting_csv_processing(
 
     let global_processed = Arc::new(AtomicUsize::new(0));
     let progress_cb = progress_callback.clone();
+    let prefix_cb = prefix_callback.clone();
 
     let results: Vec<Result<(), String>> = py.allow_threads(|| {
         tasks.par_iter().map(|(data_list, filename, mode)| {
@@ -208,6 +209,11 @@ pub fn writting_csv_processing(
                     Python::with_gil(|py| { let _ = cb.call1(py, (current,)); });
                 }
             }
+
+            if let Some(ref cb) = prefix_cb {
+                Python::with_gil(|py| { let _ = cb.call1(py, (format!("flushing {} to disk...", filename),)); });
+            }
+
             wtr.flush().map_err(|e| e.to_string())?;
             Ok(())
         }).collect()
@@ -257,6 +263,7 @@ pub fn writting_json_processing(
 
     let global_processed = Arc::new(AtomicUsize::new(0));
     let progress_cb = progress_callback.clone();
+    let prefix_cb = prefix_callback.clone();
 
     let results: Vec<Result<(), String>> = py.allow_threads(|| {
         tasks.par_iter().map(|(data_list, filename, mode)| {
@@ -385,6 +392,10 @@ pub fn writting_json_processing(
                 if let Some(ref cb) = progress_cb {
                     Python::with_gil(|py| { let _ = cb.call1(py, (current,)); });
                 }
+            }
+
+            if let Some(ref cb) = prefix_cb {
+                Python::with_gil(|py| { let _ = cb.call1(py, (format!("flushing {} to disk...", filename),)); });
             }
 
             file.write_all(b"]").map_err(|e| e.to_string())?;

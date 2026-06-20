@@ -73,67 +73,80 @@ pub fn check_for_update_processing(
         }
     }
 
-    // 3. Écrire les doublons supprimés dans le CSV
-    if !indices_to_delete.is_empty() {
-        let deleted_dir = Path::new(&output_directory).join("DELETED_SPECTRUMS");
-        fs::create_dir_all(&deleted_dir)?;
-        let file_path = deleted_dir.join("previously_cleaned.csv");
-
-        let mut wtr = WriterBuilder::new()
-            .delimiter(b'\t')
-            .quote(b'"')
-            .from_path(file_path)
-            .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
-
-        let mut header = ordered_columns.clone();
-        header.push("DELETION_REASON".to_string());
-        wtr.write_record(&header).map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
-
-        for &idx in &indices_to_delete {
-            let spec = &spectrum_list[idx];
-            let mut record: Vec<String> = Vec::with_capacity(ordered_columns.len() + 1);
-
-            for col in &ordered_columns {
-                record.push(spec.metadata.get(col).cloned().unwrap_or_default());
-            }
-            record.push("spectrum deleted because already processed in a previous run.".to_string());
-            wtr.write_record(&record).map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
-        }
-        wtr.flush()?;
-    }
-
-    // 4. Mettre à jour le fichier JSON
-    let update = !new_splashes.is_empty();
-    if update {
-        if let Some(obj) = json_data.get_mut("SPLASH_LIST").and_then(|v| v.as_object_mut()) {
-            for s in new_splashes {
-                obj.insert(s, serde_json::json!(true));
-            }
-        } else {
-            let mut new_obj = serde_json::Map::new();
-            for s in new_splashes {
-                new_obj.insert(s, serde_json::json!(true));
-            }
-            json_data["SPLASH_LIST"] = serde_json::Value::Object(new_obj);
-        }
-
-        let file = std::fs::File::create(&update_file_path).map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
-        serde_json::to_writer_pretty(file, &json_data).map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
-    }
-
-    // 5. Générer la liste finale (Sera maintenant quasi instantané)
-    let mut final_list = Vec::with_capacity(indices_to_keep.len());
-    let mut current_idx = 0;
-    for spec in spectrum_list.into_iter() {
-        if indices_to_keep.contains(&current_idx) {
-            final_list.push(spec);
-        }
-        current_idx += 1;
-    }
-
-    // ⚠️ GARANTIE DU 100%
+    // ⚠️ GARANTIE DU 100% DE L'ÉTAPE 2
     if let Some(cb) = &progress_callback { cb.call1(py, (total_items,))?; }
+    if let Some(cb) = &prefix_callback { cb.call1(py, ("saving updates & logs...",))?; }
+
+    let (final_list, update, deleted_count) = py.allow_threads(|| {
+        // 3. Écrire les doublons supprimés dans le CSV
+        if !indices_to_delete.is_empty() {
+            let deleted_dir = Path::new(&output_directory).join("DELETED_SPECTRUMS");
+            fs::create_dir_all(&deleted_dir)?;
+            let file_path = deleted_dir.join("previously_cleaned.csv");
+
+            let mut wtr = WriterBuilder::new()
+                .delimiter(b'\t')
+                .quote(b'"')
+                .from_path(file_path)
+                .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
+
+            let mut header = ordered_columns.clone();
+            header.push("DELETION_REASON".to_string());
+            wtr.write_record(&header).map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
+
+            for &idx in &indices_to_delete {
+                let spec = &spectrum_list[idx];
+                let mut record: Vec<String> = Vec::with_capacity(ordered_columns.len() + 1);
+
+                for col in &ordered_columns {
+                    record.push(spec.metadata.get(col).cloned().unwrap_or_default());
+                }
+                record.push("spectrum deleted because already processed in a previous run.".to_string());
+                wtr.write_record(&record).map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
+            }
+            wtr.flush()?;
+        }
+
+        // 4. Mettre à jour le fichier JSON
+        let update = !new_splashes.is_empty();
+        if update {
+            let file = std::fs::File::create(&update_file_path).map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
+            let mut wtr = std::io::BufWriter::new(file);
+            use std::io::Write;
+            
+            wtr.write_all(b"{\"SPLASH_LIST\":{").map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
+            
+            let mut first = true;
+            for s in &splash_set {
+                if !first { wtr.write_all(b",").map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?; }
+                serde_json::to_writer(&mut wtr, s).map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
+                wtr.write_all(b":true").map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
+                first = false;
+            }
+            for s in &new_splashes {
+                if !first { wtr.write_all(b",").map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?; }
+                serde_json::to_writer(&mut wtr, s).map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
+                wtr.write_all(b":true").map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
+                first = false;
+            }
+            
+            wtr.write_all(b"}}").map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
+            wtr.flush().map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
+        }
+
+        // 5. Générer la liste finale
+        let mut final_list = Vec::with_capacity(indices_to_keep.len());
+        let mut current_idx = 0;
+        for spec in spectrum_list.into_iter() {
+            if indices_to_keep.contains(&current_idx) {
+                final_list.push(spec);
+            }
+            current_idx += 1;
+        }
+
+        Ok::<_, pyo3::PyErr>((final_list, update, indices_to_delete.len()))
+    })?;
 
     // On renvoie la nouvelle liste, le booléen (y a-t-il eu une MAJ ?), et le nombre de supprimés
-    Ok((final_list, update, indices_to_delete.len()))
+    Ok((final_list, update, deleted_count))
 }

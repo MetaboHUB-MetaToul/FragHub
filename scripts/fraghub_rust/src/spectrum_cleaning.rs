@@ -178,55 +178,61 @@ pub fn spectrum_cleaning_processing(
         }
     }
 
-    // 4. Écriture des CSV de suppression
-    if !deleted_spectra.is_empty() {
-        let del_dir = Path::new(&output_directory).join("DELETED_SPECTRUMS");
-        fs::create_dir_all(&del_dir)?;
-
-        for (reason, group) in deleted_spectra {
-            let file_name = match reason.as_str() {
-                "spectrum deleted because peaks list is empty" => "peaks_list_is_empty.csv",
-                "spectrum deleted because precursor mz is less than or equal to zero." => "precursor_mz_less_than_or_equal_zero.csv",
-                "spectrum deleted because it's entropy score is lower than the threshold selected by the user." => "entropy_score_lower_than_threshold.csv",
-                "spectrum deleted because precursor mz field is empty or contains invalid characters (not a floating number)." => "precursor_mz_invalid_or_empty.csv",
-                "spectrum deleted because it has neither inchi nor smiles nor inchikey" => "no_inchi_smiles_or_inchikey.csv",
-                "spectrum deleted because its adduct field is empty or the value entered is not an adduct" => "adduct_empty_or_invalid.csv",
-                "spectrum deleted because the adduct corresponds to the wrong ionization mode (neg adduct in pos ionmode)." => "wrong_adduct_neg_in_pos.csv",
-                "spectrum deleted because the adduct corresponds to the wrong ionization mode (pos adduct in neg ionmode)." => "wrong_adduct_pos_in_neg.csv",
-                "spectrum deleted because its number of peaks is below the threshold chosen by the user" => "number_of_peaks_below_threshold.csv",
-                "spectrum deleted because peaks list is empty after removing peaks above precursor m/z" => "peaks_empty_after_above_precursor_mz_removal.csv",
-                "spectrum deleted because peaks list is empty after removing peaks out of mz range choiced by the user" => "peaks_empty_after_mz_range_removal.csv",
-                "spectrum deleted because peaks list does not contain minimum number of high peaks required according to the value choiced by the user" => "insufficient_high_peaks.csv",
-                _ => "other_deletions.csv"
-            };
-
-            let mut wtr = WriterBuilder::new().delimiter(b'\t').quote(b'"').from_path(del_dir.join(file_name)).unwrap();
-            let mut header = ordered_columns.clone();
-            header.push("DELETION_REASON".to_string());
-            wtr.write_record(&header).unwrap();
-
-            for meta in group {
-                let mut record = Vec::with_capacity(ordered_columns.len() + 1);
-                for col in &ordered_columns {
-                    record.push(meta.get(col).cloned().unwrap_or_default());
-                }
-                record.push(meta.get("DELETION_REASON").cloned().unwrap_or_default());
-                wtr.write_record(&record).unwrap();
-            }
-            wtr.flush().unwrap();
-        }
-    }
-
-    // 5. Reconstruction de la liste finale
-    let mut final_list = Vec::with_capacity(kept_spectra.len());
-    for (meta, peaks) in kept_spectra {
-        let mut spec = Spectrum::default();
-        spec.metadata = meta;
-        spec.peaks = peaks; // CORRECTION : On réinjecte le tableau de pics dans l'objet final !
-        final_list.push(spec);
-    }
-
     if let Some(cb) = &progress_callback { cb.call1(py, (total_items,))?; }
+    if let Some(cb) = &prefix_callback { cb.call1(py, ("writing deletion logs...",))?; }
+
+    let final_list = py.allow_threads(|| {
+        // 4. Écriture des CSV de suppression
+        if !deleted_spectra.is_empty() {
+            let del_dir = Path::new(&output_directory).join("DELETED_SPECTRUMS");
+            fs::create_dir_all(&del_dir)?;
+
+            let deleted_spectra_vec: Vec<_> = deleted_spectra.into_iter().collect();
+            deleted_spectra_vec.into_par_iter().for_each(|(reason, group)| {
+                let file_name = match reason.as_str() {
+                    "spectrum deleted because peaks list is empty" => "peaks_list_is_empty.csv",
+                    "spectrum deleted because precursor mz is less than or equal to zero." => "precursor_mz_less_than_or_equal_zero.csv",
+                    "spectrum deleted because it's entropy score is lower than the threshold selected by the user." => "entropy_score_lower_than_threshold.csv",
+                    "spectrum deleted because precursor mz field is empty or contains invalid characters (not a floating number)." => "precursor_mz_invalid_or_empty.csv",
+                    "spectrum deleted because it has neither inchi nor smiles nor inchikey" => "no_inchi_smiles_or_inchikey.csv",
+                    "spectrum deleted because its adduct field is empty or the value entered is not an adduct" => "adduct_empty_or_invalid.csv",
+                    "spectrum deleted because the adduct corresponds to the wrong ionization mode (neg adduct in pos ionmode)." => "wrong_adduct_neg_in_pos.csv",
+                    "spectrum deleted because the adduct corresponds to the wrong ionization mode (pos adduct in neg ionmode)." => "wrong_adduct_pos_in_neg.csv",
+                    "spectrum deleted because its number of peaks is below the threshold chosen by the user" => "number_of_peaks_below_threshold.csv",
+                    "spectrum deleted because peaks list is empty after removing peaks above precursor m/z" => "peaks_empty_after_above_precursor_mz_removal.csv",
+                    "spectrum deleted because peaks list is empty after removing peaks out of mz range choiced by the user" => "peaks_empty_after_mz_range_removal.csv",
+                    "spectrum deleted because peaks list does not contain minimum number of high peaks required according to the value choiced by the user" => "insufficient_high_peaks.csv",
+                    _ => "other_deletions.csv"
+                };
+
+                let mut wtr = WriterBuilder::new().delimiter(b'\t').quote(b'"').from_path(del_dir.join(file_name)).unwrap();
+                let mut header = ordered_columns.clone();
+                header.push("DELETION_REASON".to_string());
+                wtr.write_record(&header).unwrap();
+
+                for meta in group {
+                    let mut record = Vec::with_capacity(ordered_columns.len() + 1);
+                    for col in &ordered_columns {
+                        record.push(meta.get(col).cloned().unwrap_or_default());
+                    }
+                    record.push(meta.get("DELETION_REASON").cloned().unwrap_or_default());
+                    wtr.write_record(&record).unwrap();
+                }
+                wtr.flush().unwrap();
+            });
+        }
+
+        // 5. Reconstruction de la liste finale
+        let mut final_list = Vec::with_capacity(kept_spectra.len());
+        for (meta, peaks) in kept_spectra {
+            let mut spec = Spectrum::default();
+            spec.metadata = meta;
+            spec.peaks = peaks; // CORRECTION : On réinjecte le tableau de pics dans l'objet final !
+            final_list.push(spec);
+        }
+
+        Ok::<_, pyo3::PyErr>(final_list)
+    })?;
 
     Ok(final_list)
 }
