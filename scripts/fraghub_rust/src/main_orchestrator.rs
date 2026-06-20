@@ -368,6 +368,9 @@ pub fn main_orchestrator(
         py.allow_threads(|| { std::thread::sleep(std::time::Duration::from_millis(10)); });
 
         let current_datetime = Local::now().format("%d_%m_%Y__%H_%M_%S").to_string();
+        let report_filename = format!("report_{}.html", current_datetime);
+        let report_path = std::path::Path::new(&output_directory).join(&report_filename);
+        let final_report_path_str = report_path.to_string_lossy().to_string();
         
         let elapsed_for_report = start_time.elapsed().unwrap().as_secs();
         let hours_r = elapsed_for_report / 3600;
@@ -377,14 +380,18 @@ pub fn main_orchestrator(
 
         generate_report_processing(py, output_directory, current_datetime, total_time_str, &params_f64, &input_paths, &deletion_report, &pos_lc_df, &pos_lc_in_silico_df, &pos_gc_df, &pos_gc_in_silico_df, &neg_lc_df, &neg_lc_in_silico_df, &neg_gc_df, &neg_gc_in_silico_df)?;
 
-    }
+        if let Some(cb) = &completion_callback {
+            let elapsed = start_time.elapsed().unwrap().as_secs();
+            let hours = elapsed / 3600;
+            let mins = (elapsed % 3600) / 60;
+            let secs = elapsed % 60;
+            cb.call1(py, (format!("--- TOTAL TIME: {:02}:{:02}:{:02} ---", hours, mins, secs), final_report_path_str))?;
+        }
 
-    if let Some(cb) = &completion_callback {
-        let elapsed = start_time.elapsed().unwrap().as_secs();
-        let hours = elapsed / 3600;
-        let mins = (elapsed % 3600) / 60;
-        let secs = elapsed % 60;
-        cb.call1(py, (format!("--- TOTAL TIME: {:02}:{:02}:{:02} ---", hours, mins, secs),))?;
+    } else {
+        if let Some(cb) = &completion_callback {
+            cb.call1(py, ("Process stopped by user", ""))?;
+        }
     }
 
     Ok(0)

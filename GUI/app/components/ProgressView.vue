@@ -9,71 +9,82 @@
 
       <v-tabs v-model="tabReport" bg-color="grey-lighten-4" density="compact" style="flex: 0 0 auto;">
         <v-tab value="report" class="font-weight-bold">EXECUTION REPORT</v-tab>
+        <v-tab value="html_report" v-if="isFinished && htmlReportPath" class="font-weight-bold text-primary">HTML RESULT</v-tab>
       </v-tabs>
 
       <v-card-text class="pa-4 bg-white-transparent" ref="reportContainer" style="flex: 1 1 auto; overflow-y: auto; min-height: 0;">
+        <div v-show="tabReport === 'report'">
+          <div v-for="(log, i) in logs" :key="i" class="mb-1">
 
-        <div v-for="(log, i) in logs" :key="i" class="mb-1">
+            <div v-if="log.type === 'step'" class="text-center font-weight-bold text-subtitle-1 my-4 text-blue-darken-3">
+              {{ log.text }}
+            </div>
 
-          <div v-if="log.type === 'step'" class="text-center font-weight-bold text-subtitle-1 my-4 text-blue-darken-3">
-            {{ log.text }}
-          </div>
+            <div v-else-if="log.type === 'deletion'" class="text-center text-red-darken-2 font-weight-medium text-subtitle-2 my-1" style="white-space: pre-line;">
+              {{ log.text }}
+            </div>
 
-          <div v-else-if="log.type === 'deletion'" class="text-center text-red-darken-2 font-weight-medium text-subtitle-2 my-1" style="white-space: pre-line;">
-            {{ log.text }}
-          </div>
+            <div v-else-if="log.type === 'progress_finished'" class="mt-2 finished-progress-zone">
+              <div class="d-flex align-center justify-start mb-3">
+                <v-icon color="success" class="mr-2" size="22">mdi-check-circle-outline</v-icon>
+                <div class="text-subtitle-1 font-weight-bold text-green-darken-4 text-truncate">
+                  {{ log.prefix.replace(/:\s*$/, '') }}
+                </div>
+              </div>
 
-          <div v-else-if="log.type === 'progress_finished'" class="mt-2 finished-progress-zone">
-            <div class="d-flex align-center justify-start mb-3">
-              <v-icon color="success" class="mr-2" size="22">mdi-check-circle-outline</v-icon>
-              <div class="text-subtitle-1 font-weight-bold text-green-darken-4 text-truncate">
-                {{ log.prefix.replace(/:\s*$/, '') }}
+              <v-progress-linear
+                  :model-value="100"
+                  height="26"
+                  color="success"
+                  rounded
+                  class="finished-bar"
+              >
+                <template v-slot:default>
+                  <span class="text-white font-weight-black text-caption px-2 drop-shadow">
+                    100.00%
+                  </span>
+                </template>
+              </v-progress-linear>
+
+              <div class="d-flex justify-space-between mt-2">
+                <div class="text-caption text-green-darken-3 font-weight-bold text-left">
+                  {{ log.current }} of {{ log.total }} {{ log.itemType }} &nbsp;|&nbsp; Elapsed: {{ log.elapsed }} &nbsp;|&nbsp; ETA: 00:00:00
+                </div>
+                <div class="text-caption text-green-darken-3 font-weight-bold text-right">
+                  {{ log.speed }} {{ log.itemType }}/s
+                </div>
               </div>
             </div>
 
-            <v-progress-linear
-                :model-value="100"
-                height="26"
-                color="success"
-                rounded
-                class="finished-bar"
-            >
-              <template v-slot:default>
-                <span class="text-white font-weight-black text-caption px-2 drop-shadow">
-                  100.00%
-                </span>
-              </template>
-            </v-progress-linear>
-
-            <div class="d-flex justify-space-between mt-2">
-              <div class="text-caption text-green-darken-3 font-weight-bold text-left">
-                {{ log.current }} of {{ log.total }} {{ log.itemType }} &nbsp;|&nbsp; Elapsed: {{ log.elapsed }} &nbsp;|&nbsp; ETA: 00:00:00
-              </div>
-              <div class="text-caption text-green-darken-3 font-weight-bold text-right">
-                {{ log.speed }} {{ log.itemType }}/s
-              </div>
-            </div>
           </div>
 
+          <ActiveProgress
+              v-if="!isFinished"
+              :prefix="currentPrefix"
+              :progress-percent="progressPercent"
+              :current="progressValue"
+              :total="totalItems"
+              :item-type="itemType"
+              :elapsed="formattedElapsed"
+              :eta="formattedEta"
+              :speed="speedVal"
+          />
+
+          <div v-else class="text-center py-8">
+            <v-icon color="success" size="64" class="mb-4">mdi-check-circle</v-icon>
+            <div class="text-h4 font-weight-black text-green-darken-3">{{ finalMessage }}</div>
+          </div>
         </div>
 
-        <ActiveProgress
-            v-if="!isFinished"
-            :prefix="currentPrefix"
-            :progress-percent="progressPercent"
-            :current="progressValue"
-            :total="totalItems"
-            :item-type="itemType"
-            :elapsed="formattedElapsed"
-            :eta="formattedEta"
-            :speed="speedVal"
-        />
-
-        <div v-else class="text-center py-8">
-          <v-icon color="success" size="64" class="mb-4">mdi-check-circle</v-icon>
-          <div class="text-h4 font-weight-black text-green-darken-3">{{ finalMessage }}</div>
+        <div v-if="tabReport === 'html_report'" class="h-100">
+          <iframe 
+              v-if="htmlReportPath" 
+              :src="'http://127.0.0.1:8000/report?path=' + encodeURIComponent(htmlReportPath)" 
+              width="100%" 
+              height="100%" 
+              style="border: none; min-height: 800px; border-radius: 8px;">
+          </iframe>
         </div>
-
       </v-card-text>
     </v-card>
 
@@ -110,6 +121,7 @@ const finalMessage = ref('')
 
 const progressValue = ref(0)
 const totalItems = ref(0)
+const htmlReportPath = ref(null)
 let taskFinishedLogged = false
 let timerHandle = null
 
@@ -213,9 +225,21 @@ onMounted(() => {
 
   socket.on('completion', (val) => {
     progressValue.value = totalItems.value
-    finalMessage.value = val
+    
+    if (typeof val === 'string') {
+      finalMessage.value = val
+      htmlReportPath.value = null
+    } else {
+      finalMessage.value = val.message
+      htmlReportPath.value = val.report_path
+    }
+    
     isFinished.value = true
     isStopping.value = false
+    
+    if (htmlReportPath.value) {
+      tabReport.value = 'html_report'
+    }
   })
 })
 

@@ -6,6 +6,7 @@ import traceback
 import time
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, BackgroundTasks
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -132,7 +133,11 @@ def step_callback(*args):
     if args: emit_to_frontend('step', args[0])
 
 def completion_callback(*args):
-    if args: emit_to_frontend('completion', args[0])
+    if args:
+        if len(args) > 1:
+            emit_to_frontend('completion', {'message': args[0], 'report_path': args[1]})
+        else:
+            emit_to_frontend('completion', {'message': args[0], 'report_path': None})
 
 def deletion_callback(*args):
     if args: emit_to_frontend('deletion', args[0])
@@ -150,6 +155,12 @@ async def stop_analysis():
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}
+
+@app.get("/report")
+async def get_report(path: str):
+    if os.path.exists(path):
+        return FileResponse(path)
+    return {"error": "Report not found"}
 
 @app.get("/init-data")
 async def init_data():
