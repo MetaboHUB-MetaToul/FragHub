@@ -67,6 +67,11 @@ To use this programme:
 3) Progress start. At any time you can click on STOP button to close the programme.<br>![img_5.png](img_5.png)
 4) When Progress is finish, click on FINISH button to close the programme.<br>![img_6.png](img_6.png)
 5) **DO NOT DELETE FILES INTO YOUR SELECTED OUTPUT DIRECTORY AFTER COPY CLEANED VERSIONS.**
+---
+
+## TECHNICAL DOCUMENTATION
+
+Please refer to the [technical documentation](documentation/) for comprehensive details regarding the architecture, inner workings, and development of FragHub.
 
 ---
 
