@@ -363,8 +363,19 @@ pub fn main_orchestrator(
         }
 
         // STEP 12: REPORT
+        py.allow_threads(|| { std::thread::sleep(std::time::Duration::from_millis(10)); });
+        if let Some(cb) = &step_callback { cb.call1(py, ("-- GENERATING REPORT --",))?; }
+        py.allow_threads(|| { std::thread::sleep(std::time::Duration::from_millis(10)); });
+
         let current_datetime = Local::now().format("%d_%m_%Y__%H_%M_%S").to_string();
-        generate_report_processing(py, output_directory, current_datetime, &params_f64, &input_paths, &deletion_report, &pos_lc_df, &pos_lc_in_silico_df, &pos_gc_df, &pos_gc_in_silico_df, &neg_lc_df, &neg_lc_in_silico_df, &neg_gc_df, &neg_gc_in_silico_df)?;
+        
+        let elapsed_for_report = start_time.elapsed().unwrap().as_secs();
+        let hours_r = elapsed_for_report / 3600;
+        let mins_r = (elapsed_for_report % 3600) / 60;
+        let secs_r = elapsed_for_report % 60;
+        let total_time_str = format!("{:02}:{:02}:{:02}", hours_r, mins_r, secs_r);
+
+        generate_report_processing(py, output_directory, current_datetime, total_time_str, &params_f64, &input_paths, &deletion_report, &pos_lc_df, &pos_lc_in_silico_df, &pos_gc_df, &pos_gc_in_silico_df, &neg_lc_df, &neg_lc_in_silico_df, &neg_gc_df, &neg_gc_in_silico_df)?;
 
     }
 

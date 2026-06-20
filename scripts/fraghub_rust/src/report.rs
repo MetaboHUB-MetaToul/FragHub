@@ -35,6 +35,7 @@ pub fn generate_report_processing(
     _py: Python,
     output_directory: String,
     date_str: String,
+    total_time_str: String,
     parameters_dict: &std::collections::HashMap<String, f64>,
     input_paths: &Vec<String>,
     deletion_report: &crate::deletion_report::DeletionReport,
@@ -116,6 +117,7 @@ pub fn generate_report_processing(
     };
 
     let mut html = String::from(include_str!("report_template.html"));
+    html = html.replace("{TOTAL_TIME}", &total_time_str);
 
     html = html.replace("{DATE}", &date_str.replace("_", " ").replace("  ", " at "));
     html = html.replace("{MSP}", &msp_files);
@@ -339,6 +341,8 @@ pub fn generate_report_processing(
     html = html.replace("{NP_VALUES}", &np_values_json);
     html = html.replace("{NP_IDS}", &np_ids_json);
 
+    
+    
     
     let file_name = format!("report_{}.html", date_str);
     let report_path = Path::new(&output_directory).join(file_name);
