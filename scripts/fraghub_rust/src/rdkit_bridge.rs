@@ -26,81 +26,69 @@ pub fn process_mols(
     if let Some(cb) = &prefix_callback { cb.call1(py, ("derivation and calculation (RDKit via Rust):",))?; }
     if let Some(cb) = &item_type_callback { cb.call1(py, ("rows",))?; }
 
-    // 1. Importer RDKit via PyO3
-    let chem = py.import_bound("rdkit.Chem")?;
-    let exact_mol_wt = py.import_bound("rdkit.Chem.Descriptors")?.getattr("ExactMolWt")?;
-    let mol_wt = py.import_bound("rdkit.Chem.Descriptors")?.getattr("MolWt")?;
-    let calc_mol_formula = py.import_bound("rdkit.Chem.rdMolDescriptors")?.getattr("CalcMolFormula")?;
-
     let total = spectrum_list.len();
     if let Some(cb) = &total_items_callback { cb.call1(py, (total, 0))?; }
 
     let mut valid_list = Vec::new();
     let mut deleted_count = 0;
-    
-    // Pour stocker les lignes supprimées
     let mut deleted_rows = Vec::new();
     let columns = vec!["FILENAME", "FILEHASH", "PREDICTED", "SPLASH", "SPECTRUMID", "RESOLUTION", "SYNON", "IONIZATION", "MSLEVEL", "FRAGMENTATIONMODE", "NAME", "PRECURSORMZ", "EXACTMASS", "AVERAGEMASS", "PRECURSORTYPE", "INSTRUMENTTYPE", "INSTRUMENT", "SMILES", "INCHI", "INCHIKEY", "COLLISIONENERGY", "FORMULA", "RT", "IONMODE", "COMMENT", "ENTROPY", "CLASSYFIRE_SUPERCLASS", "CLASSYFIRE_CLASS", "CLASSYFIRE_SUBCLASS", "NPCLASS_PATHWAY", "NPCLASS_SUPERCLASS", "NPCLASS_CLASS", "NUM PEAKS", "PEAKS_LIST", "DELETION_REASON"];
 
-    // Cache pour éviter de recalculer les mêmes molécules
-    let mut cache: HashMap<String, HashMap<String, String>> = HashMap::new();
+    // 1. Extraire les molécules uniques de manière très rapide
+    let mut unique_mols: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for spec in &spectrum_list {
+        let inchi = spec.metadata.get("INCHI").map(|s| s.as_str()).unwrap_or("");
+        let smiles = spec.metadata.get("SMILES").map(|s| s.as_str()).unwrap_or("");
+        let target_mol = if !inchi.is_empty() && inchi != "nan" { inchi } else { smiles };
+        if !target_mol.is_empty() && target_mol != "nan" {
+            let mut clean_mol = target_mol.to_string();
+            if !clean_mol.contains("InChI=") {
+                clean_mol = INDIGO_SMILES_CORRECTION_PATTERN.replace_all(&clean_mol, "").to_string();
+            }
+            unique_mols.insert(clean_mol);
+        }
+    }
 
+    if let Some(cb) = &prefix_callback { cb.call1(py, ("RDKit Multi-Core processing...",))?; }
+
+    // 2. Traitement Python par lot via multiprocessing.Pool (contourne le GIL)
+    let total_unique = unique_mols.len();
+    if let Some(cb) = &total_items_callback { cb.call1(py, (total_unique, 0))?; }
+
+    // Ajoute potentiellement le dossier courant au PYTHONPATH au cas où
+    let sys = py.import_bound("sys")?;
+    let sys_path = sys.getattr("path")?;
+    sys_path.call_method1("insert", (0, ""))?;
+
+    let worker_mod = py.import_bound("rdkit_worker").map_err(|e| {
+        pyo3::exceptions::PyRuntimeError::new_err(format!("Cannot import rdkit_worker.py: {}", e))
+    })?;
+    
+    let unique_mols_vec: Vec<String> = unique_mols.into_iter().collect();
+    let prog_cb = progress_callback.clone().unwrap_or_else(|| py.None());
+    
+    let cache_dict_obj = worker_mod.call_method1("run_parallel", (unique_mols_vec, prog_cb))?;
+    let cache: HashMap<String, HashMap<String, String>> = cache_dict_obj.extract()?;
+
+    if let Some(cb) = &prefix_callback { cb.call1(py, ("applying RDKit results to all spectra...",))?; }
+    if let Some(cb) = &total_items_callback { cb.call1(py, (total, 0))?; }
+
+    // 3. Appliquer les résultats en Rust à vitesse maximale
     for (i, mut spec) in spectrum_list.into_iter().enumerate() {
         let inchi = spec.metadata.get("INCHI").cloned().unwrap_or_default();
         let smiles = spec.metadata.get("SMILES").cloned().unwrap_or_default();
-        
         let target_mol = if !inchi.is_empty() && inchi != "nan" { inchi.clone() } else { smiles.clone() };
 
         if !target_mol.is_empty() && target_mol != "nan" {
-            let mut transforms = HashMap::new();
-
-            if let Some(cached) = cache.get(&target_mol) {
-                transforms = cached.clone();
-            } else {
-                let mut clean_mol = target_mol.clone();
-                if !clean_mol.contains("InChI=") {
-                    clean_mol = INDIGO_SMILES_CORRECTION_PATTERN.replace_all(&clean_mol, "").to_string();
-                }
-
-                // Essai de conversion RDKit
-                let mol_obj = if clean_mol.contains("InChI=") {
-                    chem.call_method1("MolFromInchi", (&clean_mol,))
-                } else {
-                    chem.call_method1("MolFromSmiles", (&clean_mol,))
-                };
-
-                if let Ok(mol) = mol_obj {
-                    if !mol.is_none() {
-                        if let Ok(i) = chem.call_method1("MolToInchi", (&mol,)) { transforms.insert("INCHI".to_string(), i.to_string()); }
-                        if let Ok(ik) = chem.call_method1("MolToInchiKey", (&mol,)) { transforms.insert("INCHIKEY".to_string(), ik.to_string()); }
-                        if let Ok(s) = chem.call_method1("MolToSmiles", (&mol,)) { transforms.insert("SMILES".to_string(), s.to_string()); }
-                        if let Ok(f) = calc_mol_formula.call1((&mol,)) { transforms.insert("FORMULA".to_string(), f.to_string()); }
-                        
-                        // Recréation pour la masse (identique à Python)
-                        let i_str = transforms.get("INCHI").unwrap_or(&"".to_string()).clone();
-                        let s_str = transforms.get("SMILES").unwrap_or(&"".to_string()).clone();
-                        let target_for_mass = if !i_str.is_empty() { i_str } else { s_str };
-                        
-                        let mol_mass_obj = if target_for_mass.contains("InChI=") {
-                            chem.call_method1("MolFromInchi", (&target_for_mass,))
-                        } else {
-                            chem.call_method1("MolFromSmiles", (&target_for_mass,))
-                        };
-
-                        if let Ok(mol_mass) = mol_mass_obj {
-                            if !mol_mass.is_none() {
-                                if let Ok(em) = exact_mol_wt.call1((&mol_mass,)) { transforms.insert("EXACTMASS".to_string(), em.to_string()); }
-                                if let Ok(am) = mol_wt.call1((&mol_mass,)) { transforms.insert("AVERAGEMASS".to_string(), am.to_string()); }
-                            }
-                        }
-                    }
-                }
-                cache.insert(target_mol.clone(), transforms.clone());
+            let mut clean_mol = target_mol.clone();
+            if !clean_mol.contains("InChI=") {
+                clean_mol = INDIGO_SMILES_CORRECTION_PATTERN.replace_all(&clean_mol, "").to_string();
             }
 
-            // Appliquer les transformations
-            for (k, v) in transforms {
-                spec.metadata.insert(k, v);
+            if let Some(transforms) = cache.get(&clean_mol) {
+                for (k, v) in transforms {
+                    spec.metadata.insert(k.clone(), v.clone());
+                }
             }
         }
 
