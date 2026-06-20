@@ -211,6 +211,135 @@ pub fn generate_report_processing(
     html = html.replace("{T7}", &pos_gc_in_len.to_string()); html = html.replace("{U7}", &pos_gc_in_uniq.to_string());
     html = html.replace("{T8}", &neg_gc_in_len.to_string()); html = html.replace("{U8}", &neg_gc_in_uniq.to_string());
 
+    
+    let all_spectra = pos_lc.iter()
+        .chain(pos_lc_insilico.iter())
+        .chain(pos_gc.iter())
+        .chain(pos_gc_insilico.iter())
+        .chain(neg_lc.iter())
+        .chain(neg_lc_insilico.iter())
+        .chain(neg_gc.iter())
+        .chain(neg_gc_insilico.iter());
+
+    let mut cf_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    let mut np_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+
+    let root_cf = "ClassyFire";
+    let root_np = "NPClassifier";
+
+    cf_counts.insert(root_cf.to_string(), 0);
+    np_counts.insert(root_np.to_string(), 0);
+
+    let mut cf_parents: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let mut cf_labels: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+
+    let mut np_parents: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let mut np_labels: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+
+    cf_parents.insert(root_cf.to_string(), "".to_string());
+    cf_labels.insert(root_cf.to_string(), root_cf.to_string());
+
+    np_parents.insert(root_np.to_string(), "".to_string());
+    np_labels.insert(root_np.to_string(), root_np.to_string());
+
+    let clean_str = |s: &str| -> String {
+        let t = s.trim().to_string();
+        if t.is_empty() || t.to_lowercase() == "nan" { "Unknown".to_string() } else { t }
+    };
+
+    for spec in all_spectra {
+        let cf_sup = clean_str(spec.metadata.get("CLASSYFIRE_SUPERCLASS").map(|s| s.as_str()).unwrap_or(""));
+        let cf_cla = clean_str(spec.metadata.get("CLASSYFIRE_CLASS").map(|s| s.as_str()).unwrap_or(""));
+        let cf_sub = clean_str(spec.metadata.get("CLASSYFIRE_SUBCLASS").map(|s| s.as_str()).unwrap_or(""));
+
+        let p1 = format!("{}|{}", root_cf, cf_sup);
+        let p2 = format!("{}|{}", p1, cf_cla);
+        let p3 = format!("{}|{}", p2, cf_sub);
+
+        cf_labels.insert(p1.clone(), cf_sup);
+        cf_parents.insert(p1.clone(), root_cf.to_string());
+        
+        cf_labels.insert(p2.clone(), cf_cla);
+        cf_parents.insert(p2.clone(), p1.clone());
+
+        cf_labels.insert(p3.clone(), cf_sub);
+        cf_parents.insert(p3.clone(), p2.clone());
+
+        *cf_counts.entry(root_cf.to_string()).or_insert(0) += 1;
+        *cf_counts.entry(p1).or_insert(0) += 1;
+        *cf_counts.entry(p2).or_insert(0) += 1;
+        *cf_counts.entry(p3).or_insert(0) += 1;
+
+        let np_path = clean_str(spec.metadata.get("NPCLASS_PATHWAY").map(|s| s.as_str()).unwrap_or(""));
+        let np_sup = clean_str(spec.metadata.get("NPCLASS_SUPERCLASS").map(|s| s.as_str()).unwrap_or(""));
+        let np_cla = clean_str(spec.metadata.get("NPCLASS_CLASS").map(|s| s.as_str()).unwrap_or(""));
+
+        let n1 = format!("{}|{}", root_np, np_path);
+        let n2 = format!("{}|{}", n1, np_sup);
+        let n3 = format!("{}|{}", n2, np_cla);
+
+        np_labels.insert(n1.clone(), np_path);
+        np_parents.insert(n1.clone(), root_np.to_string());
+
+        np_labels.insert(n2.clone(), np_sup);
+        np_parents.insert(n2.clone(), n1.clone());
+
+        np_labels.insert(n3.clone(), np_cla);
+        np_parents.insert(n3.clone(), n2.clone());
+
+        *np_counts.entry(root_np.to_string()).or_insert(0) += 1;
+        *np_counts.entry(n1).or_insert(0) += 1;
+        *np_counts.entry(n2).or_insert(0) += 1;
+        *np_counts.entry(n3).or_insert(0) += 1;
+    }
+
+    let mut cf_ids_list = Vec::new();
+    let mut cf_labels_list = Vec::new();
+    let mut cf_parents_list = Vec::new();
+    let mut cf_values_list = Vec::new();
+
+    for (id, val) in &cf_counts {
+        if *val == 0 { continue; }
+        cf_ids_list.push(id.clone());
+        cf_labels_list.push(cf_labels.get(id).cloned().unwrap_or_else(|| "".to_string()));
+        cf_parents_list.push(cf_parents.get(id).cloned().unwrap_or_else(|| "".to_string()));
+        cf_values_list.push(*val);
+    }
+
+    let mut np_ids_list = Vec::new();
+    let mut np_labels_list = Vec::new();
+    let mut np_parents_list = Vec::new();
+    let mut np_values_list = Vec::new();
+
+    for (id, val) in &np_counts {
+        if *val == 0 { continue; }
+        np_ids_list.push(id.clone());
+        np_labels_list.push(np_labels.get(id).cloned().unwrap_or_else(|| "".to_string()));
+        np_parents_list.push(np_parents.get(id).cloned().unwrap_or_else(|| "".to_string()));
+        np_values_list.push(*val);
+    }
+
+    let cf_labels_json = serde_json::to_string(&cf_labels_list).unwrap_or_else(|_| "[]".to_string());
+    let cf_parents_json = serde_json::to_string(&cf_parents_list).unwrap_or_else(|_| "[]".to_string());
+    let cf_values_json = serde_json::to_string(&cf_values_list).unwrap_or_else(|_| "[]".to_string());
+    let cf_ids_json = serde_json::to_string(&cf_ids_list).unwrap_or_else(|_| "[]".to_string());
+
+    let np_labels_json = serde_json::to_string(&np_labels_list).unwrap_or_else(|_| "[]".to_string());
+    let np_parents_json = serde_json::to_string(&np_parents_list).unwrap_or_else(|_| "[]".to_string());
+    let np_values_json = serde_json::to_string(&np_values_list).unwrap_or_else(|_| "[]".to_string());
+    let np_ids_json = serde_json::to_string(&np_ids_list).unwrap_or_else(|_| "[]".to_string());
+
+    html = html.replace("{CF_LABELS}", &cf_labels_json);
+    html = html.replace("{CF_PARENTS}", &cf_parents_json);
+    html = html.replace("{CF_VALUES}", &cf_values_json);
+    html = html.replace("{CF_IDS}", &cf_ids_json);
+
+    html = html.replace("{NP_LABELS}", &np_labels_json);
+    html = html.replace("{NP_PARENTS}", &np_parents_json);
+    html = html.replace("{NP_VALUES}", &np_values_json);
+    html = html.replace("{NP_IDS}", &np_ids_json);
+
+    
     let file_name = format!("report_{}.html", date_str);
     let report_path = Path::new(&output_directory).join(file_name);
     let mut file = File::create(report_path)?;

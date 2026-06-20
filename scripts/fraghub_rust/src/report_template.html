@@ -292,6 +292,77 @@
                 </ul>
             </div>
         </div>
+        <div class="card" style="margin-top: 1.5rem; margin-bottom: 2rem;">
+            <h2>Chemical Ontologies Distribution</h2>
+            <div class="grid" style="margin-bottom: 0;">
+                <div style="border: 1px solid var(--border); border-radius: 6px; padding: 1rem; background: var(--bg);">
+                    <h3 style="text-align: center; margin-top: 0; color: #475569;">ClassyFire</h3>
+                    <div id="classyfire-chart" style="width: 100%; height: 500px;"></div>
+                </div>
+                <div style="border: 1px solid var(--border); border-radius: 6px; padding: 1rem; background: var(--bg);">
+                    <h3 style="text-align: center; margin-top: 0; color: #475569;">NPClassifier</h3>
+                    <div id="npclassifier-chart" style="width: 100%; height: 500px;"></div>
+                </div>
+            </div>
+            <p style="text-align: center; font-size: 0.8rem; color: #94a3b8; margin-top: 1rem;">Note: Interactive charts require an internet connection to load the Plotly.js library.</p>
+        </div>
     </div>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <script>
+        var cf_labels = {CF_LABELS};
+        var cf_parents = {CF_PARENTS};
+        var cf_values = {CF_VALUES};
+        var cf_ids = {CF_IDS};
+
+        var np_labels = {NP_LABELS};
+        var np_parents = {NP_PARENTS};
+        var np_values = {NP_VALUES};
+        var np_ids = {NP_IDS};
+
+        var layout = {
+            margin: {l: 0, r: 0, b: 0, t: 0},
+            sunburstcolorway: ["#0ea5e9", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6", "#f97316"],
+            paper_bgcolor: 'rgba(0,0,0,0)',
+            plot_bgcolor: 'rgba(0,0,0,0)'
+        };
+
+        var cf_display_labels = cf_labels ? cf_labels.map(function(l) { return l.toUpperCase() === "NOT FOUND" ? '<b><span style="color:#ef4444;">NOT FOUND</span></b>' : l; }) : [];
+        var cf_marker_colors = cf_labels ? cf_labels.map(function(l) { return l.toUpperCase() === "NOT FOUND" ? '#334155' : null; }) : [];
+
+        if (cf_labels && cf_labels.length > 0) {
+            var data_cf = [{
+                type: "sunburst",
+                ids: cf_ids,
+                labels: cf_display_labels,
+                parents: cf_parents,
+                values: cf_values,
+                branchvalues: "total",
+                marker: { colors: cf_marker_colors },
+                textinfo: "label+percent parent",
+                insidetextorientation: "radial",
+                hoverinfo: "label+value+percent parent"
+            }];
+            Plotly.newPlot('classyfire-chart', data_cf, layout, {displayModeBar: false, responsive: true});
+        }
+
+        var np_display_labels = np_labels ? np_labels.map(function(l) { return l.toUpperCase() === "NOT FOUND" ? '<b><span style="color:#ef4444;">NOT FOUND</span></b>' : l; }) : [];
+        var np_marker_colors = np_labels ? np_labels.map(function(l) { return l.toUpperCase() === "NOT FOUND" ? '#334155' : null; }) : [];
+
+        if (np_labels && np_labels.length > 0) {
+            var data_np = [{
+                type: "sunburst",
+                ids: np_ids,
+                labels: np_display_labels,
+                parents: np_parents,
+                values: np_values,
+                branchvalues: "total",
+                marker: { colors: np_marker_colors },
+                textinfo: "label+percent parent",
+                insidetextorientation: "radial",
+                hoverinfo: "label+value+percent parent"
+            }];
+            Plotly.newPlot('npclassifier-chart', data_np, layout, {displayModeBar: false, responsive: true});
+        }
+    </script>
 </body>
 </html>
