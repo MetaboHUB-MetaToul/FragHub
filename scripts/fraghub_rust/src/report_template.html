@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FragHub Processing Report</title>
+    <style>
+        :root {
+            --bg: #f8fafc; --surface: #ffffff; --text: #334155; --primary: #0ea5e9;
+            --border: #e2e8f0; --danger: #ef4444; --success: #22c55e;
+        }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: var(--bg); color: var(--text); line-height: 1.5; padding: 2rem; margin: 0; }
+        .container { max-width: 1100px; margin: 0 auto; }
+        .header { text-align: center; margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 2px solid var(--border); }
+        .header h1 { margin: 0; color: var(--primary); font-size: 2.5rem; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem; }
+        .card { background: var(--surface); padding: 1.5rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 1px solid var(--border); }
+        .card h2 { margin-top: 0; font-size: 1.25rem; color: var(--primary); border-bottom: 2px solid var(--border); padding-bottom: 0.75rem; margin-bottom: 1rem; }
+        .files-list { margin: 0 0 1rem 0; padding-left: 1.5rem; color: #475569; }
+        .badge { display: inline-block; padding: 0.25rem 0.6rem; border-radius: 9999px; font-size: 0.8rem; font-weight: 600; }
+        .badge.on { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+        .badge.off { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
+        table { width: 100%; border-collapse: collapse; margin-top: 1rem; background: var(--surface); }
+        th, td { text-align: left; padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); }
+        th { color: #64748b; font-weight: 600; background: #f8fafc; }
+        .param-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
+        .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
+        .stat-box { background: #f8fafc; padding: 1.25rem; border-radius: 8px; border: 1px solid var(--border); }
+        .stat-box .num { display: block; font-size: 1.5rem; font-weight: bold; margin-bottom: 0.25rem; }
+        
+        /* Interactive Chart Styles */
+        .chart-wrapper { position: relative; height: 350px; margin: 2.5rem 0 2rem 0; }
+        .y-axis { position: absolute; top: 0; left: 0; bottom: 30px; width: 40px; display: flex; flex-direction: column; justify-content: space-between; color: #64748b; font-size: 0.8rem; text-align: right; padding-right: 10px; font-family: monospace; }
+        .y-axis span { transform: translateY(-50%); }
+        .grid-lines { position: absolute; top: 0; left: 50px; right: 20px; bottom: 30px; display: flex; flex-direction: column; justify-content: space-between; pointer-events: none; }
+        .grid-line { border-top: 1px dashed var(--border); width: 100%; height: 0; }
+        .grid-line:last-child { border-top: 2px solid #94a3b8; }
+        .chart-bars { position: absolute; top: 0; left: 50px; right: 20px; bottom: 30px; display: flex; align-items: flex-end; justify-content: center; gap: 4rem; z-index: 5; }
+        
+        .bar-group { display: flex; flex-direction: column; align-items: center; width: 80px; height: 100%; justify-content: flex-end; position: relative; }
+        .bar { width: 100%; border-radius: 4px 4px 0 0; overflow: hidden; position: relative; cursor: pointer; transition: filter 0.2s, transform 0.2s; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .bar:hover { filter: brightness(1.1); transform: translateY(-2px); }
+        
+        .bar-label { position: absolute; bottom: 100%; margin-bottom: 0.5rem; font-weight: bold; font-size: 1.1rem; }
+        .bar-title { position: absolute; bottom: -30px; font-weight: 600; color: #334155; text-align: center; font-size: 0.9rem; white-space: nowrap; }
+        
+        .bar-tooltip { position: absolute; bottom: calc(100% + 8px); background: #1e293b; color: white; padding: 6px 10px; border-radius: 4px; font-size: 0.85rem; opacity: 0; pointer-events: none; white-space: nowrap; transition: opacity 0.2s; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.3); z-index: 20; }
+        .bar-tooltip::after { content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border-width: 5px; border-style: solid; border-color: #1e293b transparent transparent transparent; }
+        .bar:hover + .bar-title + .bar-tooltip, .bar:hover .bar-tooltip, .bar-group:hover .bar-tooltip { opacity: 1; }
+        
+        .stack-bar { display: flex; flex-direction: column; justify-content: flex-end; background: transparent !important; box-shadow: none !important; overflow: visible !important; }
+        .stack-bar:hover { transform: none; filter: none; }
+        .stack-segment { width: 100%; position: relative; transition: opacity 0.2s, transform 0.1s; }
+        .stack-bar:hover .stack-segment:not(:hover) { opacity: 0.4; }
+        .stack-segment:hover { transform: scaleX(1.05); z-index: 10; border-radius: 2px; }
+        
+        .seg-tooltip { position: absolute; left: calc(100% + 10px); top: 50%; transform: translateY(-50%); background: rgba(30, 41, 59, 0.95); color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; opacity: 0; pointer-events: none; white-space: nowrap; z-index: 25; font-weight: bold; border-left: 3px solid; }
+        .stack-segment:hover .seg-tooltip { opacity: 1; }
+        
+        .legend-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem; font-size: 0.85rem; margin-top: 1rem; background: #f8fafc; padding: 1rem; border-radius: 6px; border: 1px solid var(--border); }
+        .legend-item { display: flex; align-items: center; gap: 0.5rem; }
+        .legend-color { width: 14px; height: 14px; border-radius: 3px; box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+
+        /* Tree Diagram Styles */
+        .tree-container { overflow-x: auto; padding: 1rem 0; margin-top: 2rem; margin-bottom: 2rem; border-top: 1px solid var(--border); padding-top: 2rem; }
+        .tree, .tree ul, .tree li { margin: 0; padding: 0; list-style: none; }
+        .tree { display: inline-flex; }
+        .tree ul { display: flex; flex-direction: column; margin-left: 30px; position: relative; justify-content: center; }
+        .tree li { display: flex; align-items: center; position: relative; padding: 12px 0; }
+        
+        .tree ul::before { content: ''; position: absolute; left: -30px; top: 50%; width: 30px; border-top: 2px solid var(--border); }
+        .tree li::before, .tree li::after { content: ''; position: absolute; left: -30px; border-left: 2px solid var(--border); }
+        .tree li::before { top: 0; bottom: 50%; }
+        .tree li::after { top: 50%; bottom: 0; }
+        .tree li:first-child::before { border-left: none; }
+        .tree li:last-child::after { border-left: none; }
+        
+        .tree li::after { border-top: 2px solid var(--border); width: 30px; }
+        .tree li:last-child::after { border-top: none; }
+        .tree li:last-child::before { border-bottom: 2px solid var(--border); width: 30px; }
+        .tree > li::before, .tree > li::after { display: none; }
+        .tree > li > ul::before { display: none; } /* Root node connection fixed */
+
+        .node {
+            padding: 8px 16px; border-radius: 6px; background: var(--surface); border: 1px solid var(--border);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05); display: flex; flex-direction: column; align-items: center;
+            min-width: 100px; min-width: fit-content; width: max-content; flex: 0 0 auto; box-sizing: border-box; position: relative; z-index: 2; transition: transform 0.1s, box-shadow 0.1s, border-color 0.1s;
+            white-space: nowrap;
+        }
+        .node-subvalue { font-size: 0.75rem; color: #c026d3; font-weight: bold; margin-top: 4px; border-top: 1px dashed var(--border); padding-top: 4px; width: 100%; text-align: center; }
+        .node:hover { transform: scale(1.05); box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-color: var(--primary); }
+        .node-title { font-size: 0.75rem; color: #64748b; font-weight: bold; text-transform: uppercase; margin-bottom: 2px; }
+        .node-value { font-size: 1.1rem; color: var(--primary); font-weight: bold; }
+        .node-root { background: #f0fdf4; border-color: #bbf7d0; border-width: 2px; }
+        .node-root .node-value { color: var(--success); }
+        .node.leaf { background: #f8fafc; }
+        .node.leaf .node-value { font-size: 1rem; color: #334155; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>FragHub Processing Report</h1>
+            <p>Generated on: {DATE}</p>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h2>Files & Output</h2>
+                
+                <h3 style="font-size: 1rem; color: #334155; margin-bottom: 0.75rem;">Input Files</h3>
+                <strong>MSP:</strong> <ul class="files-list">{MSP}</ul>
+                <strong>JSON:</strong> <ul class="files-list">{JSON}</ul>
+                <strong>CSV:</strong> <ul class="files-list">{CSV}</ul>
+                <strong>MGF:</strong> <ul class="files-list">{MGF}</ul>
+
+                <h3 style="font-size: 1rem; color: #334155; margin-top: 1.5rem; margin-bottom: 0.75rem;">Output Format & Directory</h3>
+                <div class="param-row"><span>CSV:</span> <strong>{OUT_CSV}</strong></div>
+                <div class="param-row"><span>MSP:</span> <strong>{OUT_MSP}</strong></div>
+                <div class="param-row"><span>JSON:</span> <strong>{OUT_JSON}</strong></div>
+                <div style="margin-top: 1rem;">
+                    <span style="font-family: monospace; font-size: 0.85em; word-break: break-all; color: #475569; background: #f1f5f9; padding: 0.5rem; border-radius: 4px; display: block;">{OUT_DIR}</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Processing Parameters</h2>
+                <div class="param-row"><span>Normalize Intensity:</span> <span class="badge {C1}">{V1}</span></div>
+                <div class="param-row"><span>Remove Peak Above Precursor m/z:</span> <span class="badge {C2}">{V2}</span></div>
+                <div class="param-row" style="margin-top: 1rem;"><span>Check Minimum Peaks:</span> <span class="badge {C3}">{V3}</span></div>
+                <div class="param-row" style="padding-left: 1rem; font-size: 0.9em; color: #64748b;"><span>Required Peaks:</span> <strong>{V3_1}</strong></div>
+                <div class="param-row" style="margin-top: 1rem;"><span>Reduce Peak List:</span> <span class="badge {C4}">{V4}</span></div>
+                <div class="param-row" style="padding-left: 1rem; font-size: 0.9em; color: #64748b;"><span>Max Peaks:</span> <strong>{V4_1}</strong></div>
+                <div class="param-row" style="margin-top: 1rem;"><span>Filter by Entropy Score:</span> <span class="badge {C5}">{V5}</span></div>
+                <div class="param-row" style="padding-left: 1rem; font-size: 0.9em; color: #64748b;"><span>Minimum Score:</span> <strong>{V5_1}</strong></div>
+                <div class="param-row" style="margin-top: 1rem;"><span>Keep m/z in Range:</span> <span class="badge {C6}">{V6}</span></div>
+                <div class="param-row" style="padding-left: 1rem; font-size: 0.9em; color: #64748b;"><span>Range:</span> <strong>{V6_1} - {V6_2}</strong></div>
+                <div class="param-row" style="margin-top: 1rem;"><span>Check High Peaks:</span> <span class="badge {C7}">{V7}</span></div>
+                <div class="param-row" style="padding-left: 1rem; font-size: 0.9em; color: #64748b;"><span>Intensity % / Min Peaks:</span> <strong>{V7_1}% / {V7_2}</strong></div>
+                <div class="param-row" style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border);"><span>Reset Updates:</span> <span class="badge {C8}">{V8}</span></div>
+            </div>
+        </div>
+
+        <div class="card" style="margin-bottom: 1.5rem;">
+            <h2>Data Flow Overview</h2>
+            
+            <div class="chart-wrapper">
+                <div class="y-axis">
+                    <span>100%</span>
+                    <span>75%</span>
+                    <span>50%</span>
+                    <span>25%</span>
+                    <span>0%</span>
+                </div>
+                <div class="grid-lines">
+                    <div class="grid-line"></div>
+                    <div class="grid-line"></div>
+                    <div class="grid-line"></div>
+                    <div class="grid-line"></div>
+                    <div class="grid-line"></div>
+                </div>
+                
+                <div class="chart-bars">
+                    <div class="bar-group">
+                        <span class="bar-label" style="color: var(--primary);">{TOTAL_IN}</span>
+                        <div class="bar" style="height: 100%; background: var(--primary);">
+                            <div class="bar-tooltip" style="bottom: 100%;">{TOTAL_IN} Input Spectra</div>
+                        </div>
+                        <span class="bar-title">Input</span>
+                    </div>
+                    
+                    <div class="bar-group">
+                        <span class="bar-label" style="color: var(--danger); bottom: calc({PCT_DEL}% + 0.5rem);">{TOTAL_DEL}</span>
+                        <div class="bar-tooltip" style="bottom: calc({PCT_DEL}% + 2rem);">{TOTAL_DEL} Deleted Spectra</div>
+                        <div class="bar stack-bar" style="height: {PCT_DEL}%;">
+                            <div class="stack-segment" style="height: {H_PEAKS}%; background: #ef4444;"><span class="seg-tooltip" style="border-color:#ef4444;">no_peaks_list: {V_PEAKS}</span></div>
+                            <div class="stack-segment" style="height: {H_SMILES}%; background: #f97316;"><span class="seg-tooltip" style="border-color:#f97316;">no_smiles_no_inchi_no_inchikey: {V_SMILES}</span></div>
+                            <div class="stack-segment" style="height: {H_PRECURSOR}%; background: #eab308;"><span class="seg-tooltip" style="border-color:#eab308;">no_precursor_mz: {V_PRECURSOR}</span></div>
+                            <div class="stack-segment" style="height: {H_ADDUCT}%; background: #84cc16;"><span class="seg-tooltip" style="border-color:#84cc16;">no_or_bad_adduct: {V_ADDUCT}</span></div>
+                            <div class="stack-segment" style="height: {H_ENTROPY}%; background: #10b981;"><span class="seg-tooltip" style="border-color:#10b981;">low_entropy_score: {V_ENTROPY}</span></div>
+                            <div class="stack-segment" style="height: {H_MIN_PEAKS}%; background: #06b6d4;"><span class="seg-tooltip" style="border-color:#06b6d4;">minimum_peaks_not_requiered: {V_MIN_PEAKS}</span></div>
+                            <div class="stack-segment" style="height: {H_ABOVE_PREC}%; background: #3b82f6;"><span class="seg-tooltip" style="border-color:#3b82f6;">all_peaks_above_precursor_mz: {V_ABOVE_PREC}</span></div>
+                            <div class="stack-segment" style="height: {H_RANGE}%; background: #6366f1;"><span class="seg-tooltip" style="border-color:#6366f1;">no_peaks_in_mz_range: {V_RANGE}</span></div>
+                            <div class="stack-segment" style="height: {H_HIGH_PEAKS}%; background: #8b5cf6;"><span class="seg-tooltip" style="border-color:#8b5cf6;">minimum_high_peaks_not_requiered: {V_HIGH_PEAKS}</span></div>
+                            <div class="stack-segment" style="height: {H_DUP}%; background: #d946ef;"><span class="seg-tooltip" style="border-color:#d946ef;">duplicatas_removed: {V_DUP}</span></div>
+                            <div class="stack-segment" style="height: {H_PREV}%; background: #f43f5e;"><span class="seg-tooltip" style="border-color:#f43f5e;">previously_cleaned: {V_PREV}</span></div>
+                        </div>
+                        <span class="bar-title" style="color: var(--danger);">Deleted</span>
+                    </div>
+                    
+                    <div class="bar-group">
+                        <span class="bar-label" style="color: var(--success); bottom: calc({PCT_OUT}% + 0.5rem);">{TOTAL_OUT}</span>
+                        <div class="bar" style="height: {PCT_OUT}%; background: var(--success);">
+                            <div class="bar-tooltip" style="bottom: 100%;">{TOTAL_OUT} Saved Spectra</div>
+                        </div>
+                        <span class="bar-title" style="color: var(--success);">Saved</span>
+                    </div>
+                </div>
+            </div>
+
+            <h3 style="margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 1rem;">Deletion Reasons Breakdown</h3>
+            <div class="legend-grid">
+                <div class="legend-item"><div class="legend-color" style="background:#ef4444;"></div><span><strong>{V_PEAKS}</strong> no_peaks_list</span></div>
+                <div class="legend-item"><div class="legend-color" style="background:#f97316;"></div><span><strong>{V_SMILES}</strong> no_smiles_no_inchi_no_inchikey</span></div>
+                <div class="legend-item"><div class="legend-color" style="background:#eab308;"></div><span><strong>{V_PRECURSOR}</strong> no_precursor_mz</span></div>
+                <div class="legend-item"><div class="legend-color" style="background:#84cc16;"></div><span><strong>{V_ADDUCT}</strong> no_or_bad_adduct</span></div>
+                <div class="legend-item"><div class="legend-color" style="background:#10b981;"></div><span><strong>{V_ENTROPY}</strong> low_entropy_score</span></div>
+                <div class="legend-item"><div class="legend-color" style="background:#06b6d4;"></div><span><strong>{V_MIN_PEAKS}</strong> minimum_peaks_not_requiered</span></div>
+                <div class="legend-item"><div class="legend-color" style="background:#3b82f6;"></div><span><strong>{V_ABOVE_PREC}</strong> all_peaks_above_precursor_mz</span></div>
+                <div class="legend-item"><div class="legend-color" style="background:#6366f1;"></div><span><strong>{V_RANGE}</strong> no_peaks_in_mz_range</span></div>
+                <div class="legend-item"><div class="legend-color" style="background:#8b5cf6;"></div><span><strong>{V_HIGH_PEAKS}</strong> minimum_high_peaks_not_requiered</span></div>
+                <div class="legend-item"><div class="legend-color" style="background:#d946ef;"></div><span><strong>{V_DUP}</strong> duplicatas_removed</span></div>
+                <div class="legend-item"><div class="legend-color" style="background:#f43f5e;"></div><span><strong>{V_PREV}</strong> previously_cleaned</span></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Final Output Data</h2>
+            <div class="tree-container">
+                <ul class="tree">
+                    <li>
+                        <div class="node node-root">
+                            <span class="node-title" style="margin-bottom: 5px;">Total Spectra</span>
+                            <span class="node-value">{TOTAL_OUT}</span>
+                            <span class="node-subvalue" style="border-top: none;">Unique InChIKey: {TOTAL_UNIQ}</span>
+                        </div>
+                        <ul>
+                            <li>
+                                <div class="node">
+                                    <span class="node-title">LC</span>
+                                    <span class="node-value">{LC_TOT}</span>
+                                    <span class="node-subvalue">Unique InChIKey: {LC_UNIQ}</span>
+                                </div>
+                                <ul>
+                                    <li>
+                                        <div class="node">
+                                            <span class="node-title">POS</span>
+                                            <span class="node-value">{LC_POS_TOT}</span>
+                                            <span class="node-subvalue">Unique InChIKey: {LC_POS_UNIQ}</span>
+                                        </div>
+                                        <ul>
+                                            <li><div class="node leaf"><span class="node-title">Exp</span><span class="node-value">{T1}</span><span class="node-subvalue">Unique InChIKey: {U1}</span></div></li>
+                                            <li><div class="node leaf"><span class="node-title">In-Silico</span><span class="node-value">{T3}</span><span class="node-subvalue">Unique InChIKey: {U3}</span></div></li>
+                                        </ul>
+                                    </li>
+                                    <li>
+                                        <div class="node">
+                                            <span class="node-title">NEG</span>
+                                            <span class="node-value">{LC_NEG_TOT}</span>
+                                            <span class="node-subvalue">Unique InChIKey: {LC_NEG_UNIQ}</span>
+                                        </div>
+                                        <ul>
+                                            <li><div class="node leaf"><span class="node-title">Exp</span><span class="node-value">{T2}</span><span class="node-subvalue">Unique InChIKey: {U2}</span></div></li>
+                                            <li><div class="node leaf"><span class="node-title">In-Silico</span><span class="node-value">{T4}</span><span class="node-subvalue">Unique InChIKey: {U4}</span></div></li>
+                                        </ul>
+                                    </li>
+                                </ul>
+                            </li>
+                            <li>
+                                <div class="node">
+                                    <span class="node-title">GC</span>
+                                    <span class="node-value">{GC_TOT}</span>
+                                    <span class="node-subvalue">Unique InChIKey: {GC_UNIQ}</span>
+                                </div>
+                                <ul>
+                                    <li>
+                                        <div class="node">
+                                            <span class="node-title">POS</span>
+                                            <span class="node-value">{GC_POS_TOT}</span>
+                                            <span class="node-subvalue">Unique InChIKey: {GC_POS_UNIQ}</span>
+                                        </div>
+                                        <ul>
+                                            <li><div class="node leaf"><span class="node-title">Exp</span><span class="node-value">{T5}</span><span class="node-subvalue">Unique InChIKey: {U5}</span></div></li>
+                                            <li><div class="node leaf"><span class="node-title">In-Silico</span><span class="node-value">{T7}</span><span class="node-subvalue">Unique InChIKey: {U7}</span></div></li>
+                                        </ul>
+                                    </li>
+                                    <li>
+                                        <div class="node">
+                                            <span class="node-title">NEG</span>
+                                            <span class="node-value">{GC_NEG_TOT}</span>
+                                            <span class="node-subvalue">Unique InChIKey: {GC_NEG_UNIQ}</span>
+                                        </div>
+                                        <ul>
+                                            <li><div class="node leaf"><span class="node-title">Exp</span><span class="node-value">{T6}</span><span class="node-subvalue">Unique InChIKey: {U6}</span></div></li>
+                                            <li><div class="node leaf"><span class="node-title">In-Silico</span><span class="node-value">{T8}</span><span class="node-subvalue">Unique InChIKey: {U8}</span></div></li>
+                                        </ul>
+                                    </li>
+                                </ul>
+                            </li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
