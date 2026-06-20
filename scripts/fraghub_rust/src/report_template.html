@@ -292,7 +292,7 @@
                 </ul>
             </div>
         </div>
-                <div class="card" style="margin-top: 1.5rem; margin-bottom: 2rem;">
+                        <div class="card" style="margin-top: 1.5rem; margin-bottom: 2rem;">
             <h2>Chemical Ontologies Distribution</h2>
             <div class="grid" style="margin-bottom: 0;">
                 <div style="border: 1px solid var(--border); border-radius: 6px; padding: 1rem; background: var(--bg);">
@@ -304,11 +304,130 @@
                     <div id="npclassifier-chart" style="width: 100%; height: 500px;"></div>
                 </div>
             </div>
+
+<div class="card" style="margin-top: 1.5rem; margin-bottom: 2rem;">
+            <h2>Files Intersections (UpSet Plot)</h2>
+            <div style="border: 1px solid var(--border); border-radius: 6px; padding: 1rem; background: var(--bg); display: flex; justify-content: center; overflow-x: auto;">
+                <div id="upset-chart" style="width: 100%; min-height: 500px;"></div>
+            </div>
+            <p style="text-align: center; font-size: 0.8rem; color: #94a3b8; margin-top: 1rem;">Shows the number of unique spectra intersecting between files.</p>
+        </div>
+        
             <p style="text-align: center; font-size: 0.8rem; color: #94a3b8; margin-top: 1rem;">Note: Interactive charts require an internet connection to load the Plotly.js library.</p>
         </div>
     </div>
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
             <script>
+        var upset_data = {UPSET_DATA};
+        if (upset_data && upset_data.length > 0) {
+            upset_data.sort(function(a, b) { return b.count - a.count; });
+            upset_data = upset_data.slice(0, 40); // Standard UpSet max 40 intersections
+
+            var allSets = [];
+            upset_data.forEach(function(d) {
+                d.sets.forEach(function(s) {
+                    if (allSets.indexOf(s) === -1) allSets.push(s);
+                });
+            });
+
+            var colorPalette = [
+                '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf',
+                '#393b79', '#5254a3', '#6b6ecf', '#9c9ede', '#637939', '#8ca252', '#b5cf6b', '#cedb9c', '#8c6d31', '#bd9e39'
+            ];
+            var setColors = {};
+            allSets.forEach(function(s, i) { setColors[s] = colorPalette[i % colorPalette.length]; });
+            var bar_x = upset_data.map(function(d, i) { return 'C' + i; });
+            var bar_y = upset_data.map(function(d) { return d.count; });
+            var hover_texts = upset_data.map(function(d) { return d.sets.join(' + ') + '<br>Count: ' + d.count; });
+
+
+            var bar_colors = upset_data.map(function(d) {
+                return d.sets.length === 1 ? setColors[d.sets[0]] : '#94a3b8'; // Grey for intersections
+            });
+
+            var trace1 = {
+                x: bar_x,
+                y: bar_y,
+                text: bar_y,
+                textposition: 'outside',
+                hoverinfo: 'text',
+                hovertext: hover_texts,
+                type: 'bar',
+                marker: { color: bar_colors },
+                name: 'Size'
+            };
+
+            var scatter_x = [];
+            var scatter_y = [];
+            var scatter_colors = [];
+            var bg_x = [];
+            var bg_y = [];
+            var shapes = [];
+
+            upset_data.forEach(function(d, i) {
+                var y_vals = [];
+                allSets.forEach(function(s, s_idx) {
+                    if (d.sets.indexOf(s) !== -1) {
+                        scatter_x.push('C' + i);
+                        scatter_y.push(s);
+                        scatter_colors.push(setColors[s]);
+                        y_vals.push(s_idx);
+                    } else {
+                        bg_x.push('C' + i);
+                        bg_y.push(s);
+                    }
+                });
+
+                if (y_vals.length > 1) {
+                    var min_y = allSets[Math.min.apply(null, y_vals)];
+                    var max_y = allSets[Math.max.apply(null, y_vals)];
+                    shapes.push({
+                        type: 'line',
+                        x0: 'C' + i, y0: min_y,
+                        x1: 'C' + i, y1: max_y,
+                        line: { color: '#cbd5e1', width: 3 },
+                        layer: 'below'
+                    });
+                }
+            });
+
+            var trace2 = {
+                x: scatter_x,
+                y: scatter_y,
+                mode: 'markers',
+                type: 'scatter',
+                marker: { size: 14, color: scatter_colors },
+                hoverinfo: 'skip',
+                xaxis: 'x',
+                yaxis: 'y2'
+            };
+
+            var trace_bg = {
+                x: bg_x,
+                y: bg_y,
+                mode: 'markers',
+                type: 'scatter',
+                marker: { size: 14, color: '#e2e8f0' },
+                hoverinfo: 'skip',
+                xaxis: 'x',
+                yaxis: 'y2'
+            };
+
+            var layout = {
+                height: 600,
+                shapes: shapes,
+                xaxis: { showticklabels: false, fixedrange: true, gridcolor: 'transparent', zeroline: false },
+                yaxis: { title: 'Intersection Size', domain: [0.35, 1], fixedrange: true },
+                yaxis2: { domain: [0, 0.30], fixedrange: true, showgrid: true, gridcolor: '#f1f5f9' },
+                showlegend: false,
+                margin: { t: 40, b: 20, l: 150, r: 20 },
+                plot_bgcolor: 'transparent',
+                paper_bgcolor: 'transparent'
+            };
+
+            Plotly.newPlot('upset-chart', [trace1, trace_bg, trace2], layout, {displayModeBar: false, responsive: true});
+        }
+
         var cf_labels = {CF_LABELS};
         var cf_parents = {CF_PARENTS};
         var cf_values = {CF_VALUES};

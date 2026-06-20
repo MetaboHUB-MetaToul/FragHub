@@ -344,6 +344,49 @@ pub fn generate_report_processing(
     
     
     
+        let mut combinations_map: std::collections::HashMap<Vec<String>, usize> = std::collections::HashMap::new();
+    let mut spec_to_files: std::collections::HashMap<String, std::collections::HashSet<String>> = std::collections::HashMap::new();
+    let mut file_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+
+    let all_spectra_2 = pos_lc.iter()
+        .chain(pos_lc_insilico.iter())
+        .chain(pos_gc.iter())
+        .chain(pos_gc_insilico.iter())
+        .chain(neg_lc.iter())
+        .chain(neg_lc_insilico.iter())
+        .chain(neg_gc.iter())
+        .chain(neg_gc_insilico.iter());
+
+    for spec in all_spectra_2 {
+        let splash = spec.metadata.get("SPLASH").map(|s| s.as_str()).unwrap_or("");
+        let inchikey = spec.metadata.get("INCHIKEY").map(|s| s.as_str()).unwrap_or("");
+        let filename = spec.metadata.get("FILENAME").map(|s| s.as_str()).unwrap_or("Unknown").to_string();
+        
+        let id = format!("{}_{}", splash, inchikey);
+        spec_to_files.entry(id).or_default().insert(filename.clone());
+        *file_counts.entry(filename).or_insert(0) += 1;
+    }
+
+    // Keep top 30 files to avoid matrix explosion in frontend, while keeping it 'standard'
+    let mut files_vec: Vec<(String, usize)> = file_counts.into_iter().collect();
+    files_vec.sort_by(|a, b| b.1.cmp(&a.1));
+    let top_files: std::collections::HashSet<String> = files_vec.into_iter().take(30).map(|(f, _)| f).collect();
+
+    for (_, files) in spec_to_files {
+        let mut sorted_files: Vec<String> = files.into_iter().filter(|f| top_files.contains(f)).collect();
+        if sorted_files.is_empty() { continue; }
+        sorted_files.sort();
+        *combinations_map.entry(sorted_files).or_insert(0) += 1;
+    }
+
+    let mut upset_data = Vec::new();
+    for (files, count) in combinations_map {
+        upset_data.push(serde_json::json!({"sets": files, "count": count}));
+    }
+    let upset_json = serde_json::to_string(&upset_data).unwrap_or_else(|_| "[]".to_string());
+    
+    html = html.replace("{UPSET_DATA}", &upset_json);
+
     let file_name = format!("report_{}.html", date_str);
     let report_path = Path::new(&output_directory).join(file_name);
     let mut file = File::create(report_path)?;
