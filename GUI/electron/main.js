@@ -215,7 +215,7 @@ app.whenReady().then(() => {
     ipcMain.handle('dialog:openFiles', async () => {
         const { canceled, filePaths } = await dialog.showOpenDialog({
             title: 'Select input files',
-            properties: ['openFile', 'multiSelections'],
+            properties: ['openFile', 'multiSelections', 'createDirectory'],
             filters: [{ name: 'Spectrometry Files', extensions: ['json', 'csv', 'msp', 'mgf'] }]
         })
         return canceled ? [] : filePaths
@@ -225,7 +225,7 @@ app.whenReady().then(() => {
     ipcMain.handle('dialog:openFolder', async () => {
         const { canceled, filePaths } = await dialog.showOpenDialog({
             title: 'Select output directory',
-            properties: ['openDirectory']
+            properties: ['openDirectory', 'createDirectory']
         })
         return canceled ? null : filePaths[0]
     })

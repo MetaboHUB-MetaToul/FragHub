@@ -18,23 +18,25 @@
             @change="handleFileChange"
         />
 
-        <v-btn
-            icon
-            width="100"
-            height="100"
-            elevation="3"
-            color="grey-lighten-4"
-            class="mb-4"
-            @click="browseFiles"
-        >
-          <v-icon
-              size="50"
-              :color="hasFiles ? 'success' : 'primary'"
-              :icon="hasFiles ? 'mdi-file-plus-outline' : 'mdi-file-document-multiple-outline'"
-          ></v-icon>
-        </v-btn>
+        <div class="d-flex justify-center flex-shrink-0 button-zone">
+          <v-btn
+              icon
+              width="100"
+              height="100"
+              elevation="3"
+              color="grey-lighten-4"
+              class="mb-4"
+              @click="browseFiles"
+          >
+            <v-icon
+                size="50"
+                :color="hasFiles ? 'success' : 'primary'"
+                :icon="hasFiles ? 'mdi-file-plus-outline' : 'mdi-file-document-multiple-outline'"
+            ></v-icon>
+          </v-btn>
+        </div>
 
-        <div class="text-subtitle-1 font-weight-bold text-center">
+        <div class="text-subtitle-1 font-weight-bold text-center mt-2">
           {{ hasFiles ? 'Add more files' : 'Select input files' }}
         </div>
       </div>

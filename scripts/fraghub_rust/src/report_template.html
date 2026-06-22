@@ -5,96 +5,108 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FragHub Processing Report</title>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Inter:wght@400;500;600&display=swap');
+        
         :root {
-            --bg: #f8fafc; --surface: #ffffff; --text: #334155; --primary: #0ea5e9;
-            --border: #e2e8f0; --danger: #ef4444; --success: #22c55e;
+            --bg: #f4f7fb; --surface: rgba(255, 255, 255, 0.85); --text: #334155; --primary: #0ea5e9;
+            --border: rgba(226, 232, 240, 0.8); --danger: #ef4444; --success: #10b981;
+            --glass-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
         }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: var(--bg); color: var(--text); line-height: 1.5; padding: 2rem; margin: 0; }
+        body { 
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; 
+            background-color: var(--bg); color: var(--text); line-height: 1.6; padding: 2rem; margin: 0; 
+            background-image: radial-gradient(circle at 15% 50%, rgba(14, 165, 233, 0.05), transparent 25%), radial-gradient(circle at 85% 30%, rgba(16, 185, 129, 0.05), transparent 25%);
+            background-attachment: fixed;
+        }
         .container { max-width: 1100px; margin: 0 auto; }
-        .header { text-align: center; margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 2px solid var(--border); }
-        .header h1 { margin: 0; color: var(--primary); font-size: 2.5rem; }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem; }
-        .card { background: var(--surface); padding: 1.5rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 1px solid var(--border); }
-        .card h2 { margin-top: 0; font-size: 1.25rem; color: var(--primary); border-bottom: 2px solid var(--border); padding-bottom: 0.75rem; margin-bottom: 1rem; }
-        .files-list { margin: 0 0 1rem 0; padding-left: 1.5rem; color: #475569; }
-        .badge { display: inline-block; padding: 0.25rem 0.6rem; border-radius: 9999px; font-size: 0.8rem; font-weight: 600; }
-        .badge.on { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
-        .badge.off { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
-        table { width: 100%; border-collapse: collapse; margin-top: 1rem; background: var(--surface); }
-        th, td { text-align: left; padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); }
-        th { color: #64748b; font-weight: 600; background: #f8fafc; }
-        .param-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
-        .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
-        .stat-box { background: #f8fafc; padding: 1.25rem; border-radius: 8px; border: 1px solid var(--border); }
-        .stat-box .num { display: block; font-size: 1.5rem; font-weight: bold; margin-bottom: 0.25rem; }
+        .header { text-align: center; margin-bottom: 3rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--border); }
+        .header h1 { font-family: 'Outfit', sans-serif; margin: 0; color: var(--primary); font-size: 3rem; font-weight: 700; text-shadow: 0 2px 10px rgba(14, 165, 233, 0.15); letter-spacing: -0.5px; }
+        .header p { color: #64748b; font-size: 1.1rem; }
+        .grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 2rem; margin-bottom: 2rem; }
+        .card { 
+            background: var(--surface); padding: 2rem; border-radius: 16px; 
+            box-shadow: var(--glass-shadow); border: 1px solid var(--border); 
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+        }
+        .card h2 { font-family: 'Outfit', sans-serif; margin-top: 0; font-size: 1.5rem; color: #1e293b; border-bottom: 1px solid var(--border); padding-bottom: 1rem; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 10px; }
+        .card h2::before { content: ''; display: block; width: 4px; height: 24px; background: var(--primary); border-radius: 4px; box-shadow: 0 0 8px rgba(14, 165, 233, 0.4); }
+        .files-list { margin: 0 0 1rem 0; padding-left: 1.5rem; color: #475569; word-break: break-all; overflow-wrap: break-word; }
+        .badge { display: inline-block; padding: 0.35rem 0.8rem; border-radius: 9999px; font-size: 0.85rem; font-weight: 600; letter-spacing: 0.5px; }
+        .badge.on { background: rgba(16, 185, 129, 0.1); color: #059669; border: 1px solid rgba(16, 185, 129, 0.2); box-shadow: 0 2px 4px rgba(16, 185, 129, 0.05); }
+        .badge.off { background: rgba(100, 116, 139, 0.05); color: #64748b; border: 1px solid rgba(100, 116, 139, 0.1); }
+        table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+        th, td { text-align: left; padding: 1rem; border-bottom: 1px solid var(--border); }
+        th { color: #64748b; font-weight: 600; background: rgba(241, 245, 249, 0.5); }
+        .param-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; }
+        .param-row span:first-child { color: #475569; }
         
         /* Interactive Chart Styles */
         .chart-wrapper { position: relative; height: 350px; margin: 2.5rem 0 2rem 0; }
         .y-axis { position: absolute; top: 0; left: 0; bottom: 30px; width: 40px; display: flex; flex-direction: column; justify-content: space-between; color: #64748b; font-size: 0.8rem; text-align: right; padding-right: 10px; font-family: monospace; }
         .y-axis span { transform: translateY(-50%); }
         .grid-lines { position: absolute; top: 0; left: 50px; right: 20px; bottom: 30px; display: flex; flex-direction: column; justify-content: space-between; pointer-events: none; }
-        .grid-line { border-top: 1px dashed var(--border); width: 100%; height: 0; }
-        .grid-line:last-child { border-top: 2px solid #94a3b8; }
+        .grid-line { border-top: 1px dashed rgba(0,0,0,0.05); width: 100%; height: 0; }
+        .grid-line:last-child { border-top: 2px solid rgba(0,0,0,0.15); }
         .chart-bars { position: absolute; top: 0; left: 50px; right: 20px; bottom: 30px; display: flex; align-items: flex-end; justify-content: center; gap: 4rem; z-index: 5; }
         
         .bar-group { display: flex; flex-direction: column; align-items: center; width: 80px; height: 100%; justify-content: flex-end; position: relative; }
-        .bar { width: 100%; border-radius: 4px 4px 0 0; overflow: hidden; position: relative; cursor: pointer; transition: filter 0.2s, transform 0.2s; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        .bar:hover { filter: brightness(1.1); transform: translateY(-2px); }
+        .bar { width: 100%; border-radius: 6px 6px 0 0; overflow: hidden; position: relative; cursor: pointer; transition: filter 0.3s, transform 0.3s; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        .bar:hover { filter: brightness(1.1); transform: translateY(-4px); }
         
-        .bar-label { position: absolute; bottom: 100%; margin-bottom: 0.5rem; font-weight: bold; font-size: 1.1rem; }
-        .bar-title { position: absolute; bottom: -30px; font-weight: 600; color: #334155; text-align: center; font-size: 0.9rem; white-space: nowrap; }
+        .bar-label { position: absolute; bottom: 100%; margin-bottom: 0.75rem; font-weight: bold; font-size: 1.1rem; text-shadow: 0 1px 2px rgba(255,255,255,0.8); }
+        .bar-title { position: absolute; bottom: -30px; font-weight: 600; color: #475569; text-align: center; font-size: 0.95rem; white-space: nowrap; }
         
-        .bar-tooltip { position: absolute; bottom: calc(100% + 8px); background: #1e293b; color: white; padding: 6px 10px; border-radius: 4px; font-size: 0.85rem; opacity: 0; pointer-events: none; white-space: nowrap; transition: opacity 0.2s; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.3); z-index: 20; }
-        .bar-tooltip::after { content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border-width: 5px; border-style: solid; border-color: #1e293b transparent transparent transparent; }
+        .bar-tooltip { position: absolute; bottom: calc(100% + 12px); background: rgba(30,41,59,0.9); color: white; padding: 8px 12px; border-radius: 6px; font-size: 0.85rem; opacity: 0; pointer-events: none; white-space: nowrap; transition: opacity 0.2s; font-weight: bold; box-shadow: 0 4px 12px rgba(0,0,0,0.15); border: 1px solid rgba(255,255,255,0.1); z-index: 20; backdrop-filter: blur(4px); }
         .bar:hover + .bar-title + .bar-tooltip, .bar:hover .bar-tooltip, .bar-group:hover .bar-tooltip { opacity: 1; }
         
         .stack-bar { display: flex; flex-direction: column; justify-content: flex-end; background: transparent !important; box-shadow: none !important; overflow: visible !important; }
         .stack-bar:hover { transform: none; filter: none; }
-        .stack-segment { width: 100%; position: relative; transition: opacity 0.2s, transform 0.1s; }
+        .stack-segment { width: 100%; position: relative; transition: opacity 0.2s, transform 0.2s; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.2); }
         .stack-bar:hover .stack-segment:not(:hover) { opacity: 0.4; }
-        .stack-segment:hover { transform: scaleX(1.05); z-index: 10; border-radius: 2px; }
+        .stack-segment:hover { transform: scaleX(1.1); z-index: 10; border-radius: 4px; box-shadow: 0 4px 10px rgba(0,0,0,0.15); }
         
-        .seg-tooltip { position: absolute; left: calc(100% + 10px); top: 50%; transform: translateY(-50%); background: rgba(30, 41, 59, 0.95); color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; opacity: 0; pointer-events: none; white-space: nowrap; z-index: 25; font-weight: bold; border-left: 3px solid; }
+        .seg-tooltip { position: absolute; left: calc(100% + 15px); top: 50%; transform: translateY(-50%); background: rgba(30,41,59,0.95); color: white; padding: 6px 10px; border-radius: 6px; font-size: 0.85rem; opacity: 0; pointer-events: none; white-space: nowrap; z-index: 25; font-weight: bold; border-left: 3px solid; box-shadow: 0 4px 10px rgba(0,0,0,0.1); backdrop-filter: blur(4px); }
         .stack-segment:hover .seg-tooltip { opacity: 1; }
         
-        .legend-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem; font-size: 0.85rem; margin-top: 1rem; background: #f8fafc; padding: 1rem; border-radius: 6px; border: 1px solid var(--border); }
-        .legend-item { display: flex; align-items: center; gap: 0.5rem; }
-        .legend-color { width: 14px; height: 14px; border-radius: 3px; box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+        .legend-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; font-size: 0.9rem; margin-top: 1.5rem; background: rgba(248,250,252,0.6); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border); }
+        .legend-item { display: flex; align-items: center; gap: 0.75rem; color: #475569; }
+        .legend-color { width: 16px; height: 16px; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
 
         /* Tree Diagram Styles */
-        .tree-container { overflow-x: auto; padding: 1rem 0; margin-top: 2rem; margin-bottom: 2rem; border-top: 1px solid var(--border); padding-top: 2rem; }
+        .tree-container { overflow-x: auto; padding: 2rem 0; margin-top: 2rem; margin-bottom: 2rem; border-top: 1px solid var(--border); }
         .tree, .tree ul, .tree li { margin: 0; padding: 0; list-style: none; }
         .tree { display: inline-flex; }
-        .tree ul { display: flex; flex-direction: column; margin-left: 30px; position: relative; justify-content: center; }
-        .tree li { display: flex; align-items: center; position: relative; padding: 12px 0; }
+        .tree ul { display: flex; flex-direction: column; margin-left: 40px; position: relative; justify-content: center; }
+        .tree li { display: flex; align-items: center; position: relative; padding: 16px 0; }
         
-        .tree ul::before { content: ''; position: absolute; left: -30px; top: 50%; width: 30px; border-top: 2px solid var(--border); }
-        .tree li::before, .tree li::after { content: ''; position: absolute; left: -30px; border-left: 2px solid var(--border); }
+        .tree ul::before { content: ''; position: absolute; left: -40px; top: 50%; width: 40px; border-top: 2px solid var(--border); }
+        .tree li::before, .tree li::after { content: ''; position: absolute; left: -40px; border-left: 2px solid var(--border); }
         .tree li::before { top: 0; bottom: 50%; }
         .tree li::after { top: 50%; bottom: 0; }
         .tree li:first-child::before { border-left: none; }
         .tree li:last-child::after { border-left: none; }
         
-        .tree li::after { border-top: 2px solid var(--border); width: 30px; }
+        .tree li::after { border-top: 2px solid var(--border); width: 40px; }
         .tree li:last-child::after { border-top: none; }
-        .tree li:last-child::before { border-bottom: 2px solid var(--border); width: 30px; }
+        .tree li:last-child::before { border-bottom: 2px solid var(--border); width: 40px; }
         .tree > li::before, .tree > li::after { display: none; }
-        .tree > li > ul::before { display: none; } /* Root node connection fixed */
+        .tree > li > ul::before { display: none; }
 
         .node {
-            padding: 8px 16px; border-radius: 6px; background: var(--surface); border: 1px solid var(--border);
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05); display: flex; flex-direction: column; align-items: center;
-            min-width: 100px; min-width: fit-content; width: max-content; flex: 0 0 auto; box-sizing: border-box; position: relative; z-index: 2; transition: transform 0.1s, box-shadow 0.1s, border-color 0.1s;
-            white-space: nowrap;
+            padding: 10px 20px; border-radius: 8px; background: rgba(255,255,255,0.9); border: 1px solid var(--border);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05); display: flex; flex-direction: column; align-items: center;
+            min-width: 120px; flex: 0 0 auto; box-sizing: border-box; position: relative; z-index: 2; transition: all 0.2s ease;
+            backdrop-filter: blur(5px);
         }
-        .node-subvalue { font-size: 0.75rem; color: #c026d3; font-weight: bold; margin-top: 4px; border-top: 1px dashed var(--border); padding-top: 4px; width: 100%; text-align: center; }
-        .node:hover { transform: scale(1.05); box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-color: var(--primary); }
-        .node-title { font-size: 0.75rem; color: #64748b; font-weight: bold; text-transform: uppercase; margin-bottom: 2px; }
-        .node-value { font-size: 1.1rem; color: var(--primary); font-weight: bold; }
-        .node-root { background: #f0fdf4; border-color: #bbf7d0; border-width: 2px; }
-        .node-root .node-value { color: var(--success); }
-        .node.leaf { background: #f8fafc; }
-        .node.leaf .node-value { font-size: 1rem; color: #334155; }
+        .node-subvalue { font-size: 0.8rem; color: #9333ea; font-weight: 600; margin-top: 6px; border-top: 1px dashed rgba(0,0,0,0.1); padding-top: 6px; width: 100%; text-align: center; }
+        .node:hover { transform: translateY(-3px) scale(1.02); box-shadow: 0 8px 15px rgba(0,0,0,0.1); border-color: var(--primary); }
+        .node-title { font-size: 0.8rem; color: #64748b; font-weight: 700; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 1px; }
+        .node-value { font-size: 1.25rem; color: var(--primary); font-weight: bold; }
+        .node-root { background: rgba(220, 252, 231, 0.6); border-color: #86efac; border-width: 2px; box-shadow: 0 4px 10px rgba(34, 197, 94, 0.1); }
+        .node-root .node-value { color: #16a34a; }
+        .node.leaf { background: rgba(248, 250, 252, 0.8); }
+        .node.leaf .node-value { font-size: 1.1rem; color: #334155; }
+        .node.leaf .node-title { color: #94a3b8; }
     </style>
 </head>
 <body>
@@ -119,7 +131,7 @@
                 <div class="param-row"><span>MSP:</span> <strong>{OUT_MSP}</strong></div>
                 <div class="param-row"><span>JSON:</span> <strong>{OUT_JSON}</strong></div>
                 <div style="margin-top: 1rem;">
-                    <span style="font-family: monospace; font-size: 0.85em; word-break: break-all; color: #475569; background: #f1f5f9; padding: 0.5rem; border-radius: 4px; display: block;">{OUT_DIR}</span>
+                    <span style="font-family: monospace; font-size: 0.85em; word-break: break-all; color: #0284c7; background: rgba(14, 165, 233, 0.05); padding: 0.75rem; border-radius: 6px; display: block; border: 1px solid rgba(14, 165, 233, 0.1);">{OUT_DIR}</span>
                 </div>
             </div>
 
@@ -295,11 +307,11 @@
                         <div class="card" style="margin-top: 1.5rem; margin-bottom: 2rem;">
             <h2>Chemical Ontologies Distribution</h2>
             <div class="grid" style="margin-bottom: 0;">
-                <div style="border: 1px solid var(--border); border-radius: 6px; padding: 1rem; background: var(--bg);">
+                <div style="border: 1px solid var(--border); border-radius: 12px; padding: 1rem; background: rgba(248,250,252,0.5);">
                     <h3 style="text-align: center; margin-top: 0; color: #475569;">ClassyFire</h3>
                     <div id="classyfire-chart" style="width: 100%; height: 500px;"></div>
                 </div>
-                <div style="border: 1px solid var(--border); border-radius: 6px; padding: 1rem; background: var(--bg);">
+                <div style="border: 1px solid var(--border); border-radius: 12px; padding: 1rem; background: rgba(248,250,252,0.5);">
                     <h3 style="text-align: center; margin-top: 0; color: #475569;">NPClassifier</h3>
                     <div id="npclassifier-chart" style="width: 100%; height: 500px;"></div>
                 </div>
@@ -307,15 +319,15 @@
 
         <div class="card" style="margin-top: 1.5rem; margin-bottom: 2rem;">
             <h2>Files Intersections (UpSet Plot)</h2>
-            <div style="border: 1px solid var(--border); border-radius: 6px; padding: 1rem; background: var(--bg); display: flex; justify-content: center; overflow-x: auto;">
+            <div style="border: 1px solid var(--border); border-radius: 12px; padding: 1rem; background: rgba(248,250,252,0.5); display: flex; justify-content: center; overflow-x: auto;">
                 <div id="upset-chart" style="width: 100%; min-height: 500px;"></div>
             </div>
-            <p style="text-align: center; font-size: 0.8rem; color: #94a3b8; margin-top: 1rem;">Shows the number of unique spectra intersecting between files.</p>
+            <p style="text-align: center; font-size: 0.8rem; color: #64748b; margin-top: 1rem;">Shows the number of unique spectra intersecting between files.</p>
         </div>
         
             <div class="card" style="margin-top: 1.5rem; margin-bottom: 2rem;">
             <h2>Instrument Distribution</h2>
-            <div style="border: 1px solid var(--border); border-radius: 6px; padding: 1rem; background: var(--bg); display: flex; justify-content: center;">
+            <div style="border: 1px solid var(--border); border-radius: 12px; padding: 1rem; background: rgba(248,250,252,0.5); display: flex; justify-content: center;">
                 <div id="instrument-chart" style="width: 100%; max-width: 800px; height: 500px;"></div>
             </div>
         </div>
@@ -384,7 +396,8 @@
                             verticalAlign: 'middle',
                             align: 'right',
                             fontSize: 12,
-                            fontFamily: 'Inter, sans-serif'
+                            fontFamily: 'Inter, sans-serif',
+                            color: '#334155'
                         },
                         leaves: {
                             label: {
@@ -504,12 +517,13 @@
                 height: 600,
                 shapes: shapes,
                 xaxis: { showticklabels: false, fixedrange: true, gridcolor: 'transparent', zeroline: false },
-                yaxis: { title: 'Intersection Size', domain: [0.35, 1], fixedrange: true },
-                yaxis2: { domain: [0, 0.30], fixedrange: true, showgrid: true, gridcolor: '#f1f5f9' },
+                yaxis: { title: 'Intersection Size', domain: [0.35, 1], fixedrange: true, color: '#334155', gridcolor: 'rgba(0,0,0,0.05)' },
+                yaxis2: { domain: [0, 0.30], fixedrange: true, showgrid: true, gridcolor: 'rgba(0,0,0,0.05)', color: '#334155' },
                 showlegend: false,
                 margin: { t: 40, b: 20, l: 150, r: 20 },
                 plot_bgcolor: 'transparent',
-                paper_bgcolor: 'transparent'
+                paper_bgcolor: 'transparent',
+                font: { color: '#334155', family: 'Inter' }
             };
 
             Plotly.newPlot('upset-chart', [trace1, trace_bg, trace2], layout, {displayModeBar: false, responsive: true});
@@ -527,9 +541,10 @@
 
         var layout = {
             margin: {l: 0, r: 0, b: 0, t: 0},
-            sunburstcolorway: ["#0ea5e9", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6", "#f97316"],
+            sunburstcolorway: ["#0ea5e9", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4", "#f97316"],
             paper_bgcolor: 'rgba(0,0,0,0)',
-            plot_bgcolor: 'rgba(0,0,0,0)'
+            plot_bgcolor: 'rgba(0,0,0,0)',
+            font: { color: '#334155', family: 'Inter' }
         };
 
         var cf_display_labels = cf_labels ? cf_labels.map(function(l) { return l.toUpperCase() === "NOT FOUND" ? '<b><span style="color:#ef4444;">NOT FOUND</span></b>' : l; }) : [];

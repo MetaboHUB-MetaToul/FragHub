@@ -1,5 +1,6 @@
 // src/complete_from_pubchem_datas.rs
 use pyo3::prelude::*;
+use rayon::prelude::*;
 use crate::spectrum::Spectrum;
 
 /// Complète les spectres avec les données issues de PubChem.
@@ -30,28 +31,30 @@ pub fn complete_from_pubchem_datas(
 
     let columns_to_update = ["INCHI", "SMILES", "FORMULA", "NAME", "EXACTMASS", "AVERAGEMASS"];
     let mut processed = 0;
+    let chunk_size = 500;
 
-    // --- Step 3: Boucle de mise à jour ---
-    for spec in spectrum_list.iter_mut() {
-        let inchikey = spec.metadata.get("INCHIKEY").cloned().unwrap_or_default();
+    // --- Step 3: Boucle de mise à jour (Multithreaded) ---
+    for chunk in spectrum_list.chunks_mut(chunk_size) {
+        py.allow_threads(|| {
+            chunk.par_iter_mut().for_each(|spec| {
+                let inchikey = spec.metadata.get("INCHIKEY").cloned().unwrap_or_default();
 
-        if !inchikey.is_empty() && inchikey.to_lowercase() != "nan" {
-            if let Some(pubchem_row) = pubchem_dict.get(&inchikey) {
-                for col in columns_to_update {
-                    if let Some(new_val) = pubchem_row.get(col) {
-                        if !new_val.trim().is_empty() && new_val.to_lowercase() != "nan" {
-                            spec.metadata.insert(col.to_string(), new_val.clone());
+                if !inchikey.is_empty() && inchikey.to_lowercase() != "nan" {
+                    if let Some(pubchem_row) = pubchem_dict.get(&inchikey) {
+                        for col in &columns_to_update {
+                            if let Some(new_val) = pubchem_row.get(*col) {
+                                if !new_val.trim().is_empty() && new_val.to_lowercase() != "nan" {
+                                    spec.metadata.insert(col.to_string(), new_val.clone());
+                                }
+                            }
                         }
                     }
                 }
-            }
-        }
+            });
+        });
 
-        processed += 1;
-        // Barre de progression (throttled)
-        if processed % 1000 == 0 {
-            if let Some(cb) = &progress_callback { cb.call1(py, (processed,))?; }
-        }
+        processed += chunk.len();
+        if let Some(cb) = &progress_callback { cb.call1(py, (processed,))?; }
     }
 
     if let Some(cb) = &progress_callback { cb.call1(py, (total_items,))?; }

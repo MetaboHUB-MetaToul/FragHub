@@ -1,5 +1,6 @@
 // src/ontologies_completion.rs
 use pyo3::prelude::*;
+use rayon::prelude::*;
 use crate::spectrum::Spectrum;
 
 /// Ajoute les classes chimiques (ClassyFire et NPClassifier) aux spectres.
@@ -38,35 +39,37 @@ pub fn ontologies_completion_processing(
     ];
 
     let mut processed = 0;
+    let chunk_size = 500;
 
-    // --- Step 3: Boucle de mise à jour (In-place) ---
-    for spec in spectrum_list.iter_mut() {
+    // --- Step 3: Boucle de mise à jour (Multithreaded) ---
+    for chunk in spectrum_list.chunks_mut(chunk_size) {
+        py.allow_threads(|| {
+            chunk.par_iter_mut().for_each(|spec| {
+                // Par défaut, on initialise tout à "NOT FOUND" comme dans votre code Python
+                for col in &columns_to_update {
+                    spec.metadata.insert(col.to_string(), "NOT FOUND".to_string());
+                }
 
-        // Par défaut, on initialise tout à "NOT FOUND" comme dans votre code Python
-        for col in columns_to_update {
-            spec.metadata.insert(col.to_string(), "NOT FOUND".to_string());
-        }
+                // Si on a un INCHIKEY valide, on cherche dans la base de données
+                let inchikey = spec.metadata.get("INCHIKEY").cloned().unwrap_or_default();
 
-        // Si on a un INCHIKEY valide, on cherche dans la base de données
-        let inchikey = spec.metadata.get("INCHIKEY").cloned().unwrap_or_default();
-
-        if !inchikey.is_empty() && inchikey.to_lowercase() != "nan" {
-            if let Some(ont_row) = ont_dict.get(&inchikey) {
-                for col in columns_to_update {
-                    if let Some(new_val) = ont_row.get(col) {
-                        if !new_val.trim().is_empty() && new_val.to_lowercase() != "nan" {
-                            spec.metadata.insert(col.to_string(), new_val.clone());
+                if !inchikey.is_empty() && inchikey.to_lowercase() != "nan" {
+                    if let Some(ont_row) = ont_dict.get(&inchikey) {
+                        for col in &columns_to_update {
+                            if let Some(new_val) = ont_row.get(*col) {
+                                if !new_val.trim().is_empty() && new_val.to_lowercase() != "nan" {
+                                    spec.metadata.insert(col.to_string(), new_val.clone());
+                                }
+                            }
                         }
                     }
                 }
-            }
-        }
+            });
+        });
 
-        processed += 1;
+        processed += chunk.len();
         // Barre de progression
-        if processed % 1000 == 0 {
-            if let Some(cb) = &progress_callback { cb.call1(py, (processed,))?; }
-        }
+        if let Some(cb) = &progress_callback { cb.call1(py, (processed,))?; }
     }
 
     if let Some(cb) = &progress_callback { cb.call1(py, (total_items,))?; }

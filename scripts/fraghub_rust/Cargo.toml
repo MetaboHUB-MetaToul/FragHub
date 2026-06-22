@@ -19,3 +19,8 @@ sha2 = "0.10.8" # <-- AJOUTER CECI
 hex = "0.4.3"   # <-- AJOUTER CECI
 chrono = "0.4.45"
 polars = { version = "0.39.2", features = ["parquet", "lazy"] }
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic = "abort"

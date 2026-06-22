@@ -9,7 +9,14 @@
 
       <v-tabs v-model="tabReport" bg-color="grey-lighten-4" density="compact" style="flex: 0 0 auto;">
         <v-tab value="report" class="font-weight-bold">EXECUTION REPORT</v-tab>
-        <v-tab value="html_report" v-if="isFinished && htmlReportPath" class="font-weight-bold text-primary">HTML RESULT</v-tab>
+        <v-tab 
+          value="html_report" 
+          v-if="isFinished && htmlReportPath" 
+          class="font-weight-bold text-primary"
+          :class="{'blink-tab': tabReport !== 'html_report'}"
+        >
+          HTML RESULT
+        </v-tab>
       </v-tabs>
 
       <v-card-text class="pa-4 bg-white-transparent" ref="reportContainer" style="flex: 1 1 auto; overflow-y: auto; min-height: 0;">
@@ -175,12 +182,27 @@ const scrollToBottom = async () => {
 }
 
 watch([logs, progressValue], () => {
-  scrollToBottom()
+  if (tabReport.value === 'report') {
+    scrollToBottom()
+  }
 }, { deep: true })
+
+watch(tabReport, async (newVal) => {
+  await nextTick()
+  if (reportContainer.value) {
+    const el = reportContainer.value.$el || reportContainer.value
+    if (newVal === 'html_report') {
+      el.scrollTo({ top: 0, behavior: 'auto' })
+    } else {
+      el.scrollTo({ top: el.scrollHeight, behavior: 'auto' })
+    }
+  }
+})
 
 function checkTaskFinished() {
   if (!taskFinishedLogged && totalItems.value > 0 && progressValue.value >= totalItems.value) {
     taskFinishedLogged = true
+    now.value = Date.now() // Capture exact finish time for blazing fast tasks
 
     // On passe toutes les données séparément pour maintenir le design
     logs.value.push({
@@ -238,7 +260,7 @@ onMounted(() => {
     isStopping.value = false
     
     if (htmlReportPath.value) {
-      tabReport.value = 'html_report'
+      // tabReport.value = 'html_report' // On ne bascule plus automatiquement
     }
   })
 })
@@ -290,5 +312,17 @@ onUnmounted(() => {
 .drop-shadow {
   text-shadow: 1px 1px 2px rgba(0,0,0,0.6);
   letter-spacing: 1px;
+}
+</style>
+
+<style>
+@keyframes pulseBlink {
+  0% { background-color: transparent; color: #1976D2; box-shadow: none; }
+  50% { background-color: rgba(25, 118, 210, 0.2); color: #1565C0; box-shadow: inset 0 -3px 0 #1976D2; }
+  100% { background-color: transparent; color: #1976D2; box-shadow: none; }
+}
+
+.blink-tab {
+  animation: pulseBlink 1.5s infinite alternate !important;
 }
 </style>

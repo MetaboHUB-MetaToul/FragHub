@@ -5,3 +5,5 @@
 /scripts/dist/FragHub.zip
 /scripts/dist/build/
 /scripts/dist/dist/
+
+datas/*.parquet
