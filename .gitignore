@@ -6,4 +6,4 @@
 /scripts/dist/build/
 /scripts/dist/dist/
 
-datas/*.parquet
+datas/*backup*.parquet

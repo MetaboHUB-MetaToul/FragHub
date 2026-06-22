@@ -56,7 +56,21 @@ pub fn load_internal_databases(_py: Python, base_dir: &str) -> PyResult<()> {
 
     // 2. Ontologies (Contient désormais TOUTES les données PubChem + NPClassifier + ClassyFire au format Parquet)
     let ontologies_parquet_path = base_path.join("datas").join("internal_databases.parquet");
-    let ontologies_datas = read_parquet_to_dict_of_dicts(&ontologies_parquet_path.to_string_lossy(), "INCHIKEY");
+    let mut ontologies_datas = HashMap::new();
+    
+    if ontologies_parquet_path.is_dir() {
+        if let Ok(entries) = fs::read_dir(&ontologies_parquet_path) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|s| s.to_str()) == Some("parquet") {
+                    let map = read_parquet_to_dict_of_dicts(&path.to_string_lossy(), "INCHIKEY");
+                    ontologies_datas.extend(map);
+                }
+            }
+        }
+    } else {
+        ontologies_datas = read_parquet_to_dict_of_dicts(&ontologies_parquet_path.to_string_lossy(), "INCHIKEY");
+    }
 
     // 3. Adducts
     let adduct_file_path = base_path.join("datas").join("adduct_to_convert.csv");
